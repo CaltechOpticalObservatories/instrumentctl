@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instrumentctl"
+version = "0.1.0"
+description = "Operator CLI for instruments whose daemons run as systemd template units"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["instrumentctl"]
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.pylint."messages control"]
+disable = ["too-few-public-methods"]
