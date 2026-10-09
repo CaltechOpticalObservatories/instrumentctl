@@ -190,16 +190,15 @@ def secrets_set(paths: Paths) -> Optional[Dict[str, str]]:
         return None
 
 
-def resolve(product: Product, targets: Iterable[str], names: List[str]) -> List[str]:
+def resolve(targets: Iterable[str], names: List[str]) -> List[str]:
     """Expand command-line targets against the instances in ``names``.
 
-    A target is an instance name (``hsfei_adc``), a subsystem prefix
-    (``hsfei``, or just ``fei`` where the product sets one), or ``all``.
-    Targets keep their command-line order, so ``start power fei`` powers up
-    before it starts the mechanisms. Duplicates are dropped, and a target
-    matching nothing is an error.
+    A target is an instance name (``hsfei_adc``), the prefix every instance in
+    a subsystem shares (``hsfei``), or ``all``. Targets keep their command-line
+    order, so ``start hspower hsfei`` powers up before it starts the
+    mechanisms. Duplicates are dropped, and a target matching nothing is an
+    error.
     """
-    shorthand = product.subsystem_prefix
     selected: List[str] = []
     for target in targets:
         if target == "all":
@@ -209,8 +208,6 @@ def resolve(product: Product, targets: Iterable[str], names: List[str]) -> List[
         else:
             prefix = target.rstrip("_") + "_"
             hits = [n for n in names if n.startswith(prefix)]
-            if not hits and shorthand and not target.startswith(shorthand):
-                hits = [n for n in names if n.startswith(shorthand + prefix)]
         if not hits:
             raise TargetError(target)
         selected.extend(n for n in hits if n not in selected)

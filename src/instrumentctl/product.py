@@ -33,7 +33,6 @@ class Product:  # pylint: disable=too-many-instance-attributes
     user: str
     ops_group: str
     env_prefix: str
-    subsystem_prefix: str
     secret_key_suffix: str = "_env"
     docs_url: str = ""
     # Used only in --help, where a real name beats a placeholder
@@ -61,7 +60,6 @@ class Product:  # pylint: disable=too-many-instance-attributes
             user=instrument.get("user", instrument["name"]),
             ops_group=instrument.get("ops_group", f"{instrument['name']}-ops"),
             env_prefix=instrument.get("env_prefix", instrument["name"].upper()),
-            subsystem_prefix=instrument.get("subsystem_prefix", ""),
             secret_key_suffix=secrets.get("key_suffix", "_env"),
             docs_url=instrument.get("docs_url", ""),
             example_instance=help_text.get("example_instance", "<instance>"),
