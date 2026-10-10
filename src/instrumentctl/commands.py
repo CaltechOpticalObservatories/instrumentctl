@@ -23,7 +23,7 @@ def _err(product: Product, message: str) -> None:
 def _resolve(paths: Paths, targets: List[str], names: List[str]) -> Optional[List[str]]:
     """Expand targets, explaining a miss. None means an error was printed."""
     try:
-        return inst.resolve(paths.product, targets, names)
+        return inst.resolve(targets, names)
     except TargetError as exc:
         target, prog = str(exc), paths.product.name
         if target in inst.in_repo(paths):

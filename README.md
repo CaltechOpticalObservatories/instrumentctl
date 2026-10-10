@@ -52,7 +52,6 @@ Everything except `name` is optional.
 | `user` | `name` | the account the daemons run as |
 | `ops_group` | `<name>-ops` | the group that may start, stop and deploy without a password |
 | `env_prefix` | `NAME` | instance files set `<PREFIX>_DAEMON`, `_CONFIG` and `_HOST`; operators override paths with `<PREFIX>_REPO_DIR`, `_VENV_DIR`, `_ETC_DIR` |
-| `subsystem_prefix` | none | set it only where instance names share one, so `start fei` finds `hsfei_*` |
 | `docs_url` | none | linked from `--help` |
 | `secrets.key_suffix` | `_env` | a config key ending in this names the variable holding a credential |
 | `help.example_instance` | `<instance>` | used in `--help`, where a real name beats a placeholder |
