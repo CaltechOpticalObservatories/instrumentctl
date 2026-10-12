@@ -30,6 +30,8 @@ class Product:  # pylint: disable=too-many-instance-attributes
     """One instrument's names, and the paths and units derived from them."""
 
     name: str
+    # The instrument's proper name, as it reads in systemctl status
+    display_name: str
     user: str
     ops_group: str
     env_prefix: str
@@ -57,6 +59,8 @@ class Product:  # pylint: disable=too-many-instance-attributes
         help_text = data.get("help", {})
         return cls(
             name=instrument["name"],
+            display_name=instrument.get("display_name",
+                                        instrument["name"]),
             user=instrument.get("user", instrument["name"]),
             ops_group=instrument.get("ops_group", f"{instrument['name']}-ops"),
             env_prefix=instrument.get("env_prefix", instrument["name"].upper()),

@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from . import commands
 from .doctor import doctor
+from .installer import install
 from .instances import Paths
 from .product import ConfigSource, Product
 
@@ -112,6 +113,16 @@ def _parser(product: Product) -> argparse.ArgumentParser:
     p.add_argument("-p", "--priority", help="e.g. err, warning")
 
     add("doctor", doctor, "check this host and your account, and say what to fix")
+
+    p = add("install", install, "set this host up (root)",
+            "Create the ops group and the daemon account, enrol operators, make the\n"
+            "directories, and render the unit, polkit rule, sudoers drop-in and helper\n"
+            "scripts. Safe to re-run. The virtualenv must already exist, since this\n"
+            "code lives in it.")
+    p.add_argument("operators", nargs="*", metavar="user",
+                   help=f"accounts to enrol in {product.ops_group}")
+    p.add_argument("--host-role", metavar="ROLE",
+                   help="what to record in <etc>/host (default: short hostname)")
     return parser
 
 

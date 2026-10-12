@@ -1,0 +1,53 @@
+# Rendered by `@name@ install`. Edits here are lost on the next run; change the
+# template in instrumentctl instead.
+#
+# One template unit runs every daemon. "%i" is the instance name, so
+# `systemctl start @name@@<instance>` reads @etc@/instances/<instance>.env for
+# the daemon script (@env_prefix@_DAEMON, relative to daemons/) and the config
+# to pass it (@env_prefix@_CONFIG).
+
+[Unit]
+Description=@display_name@ hardware daemon (%i)
+Documentation=@docs_url@
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@user@
+Group=@user@
+
+EnvironmentFile=@etc@/instances/%i.env
+# Optional, root-only, shared by every instance: for secrets that must not sit
+# in the instance files above, since @etc@/instances is group-readable by
+# @ops_group@. systemd reads this as root before dropping to User= below.
+EnvironmentFile=-@etc@/secrets.env
+# Drivers write their own .log next to the working directory, so this has to
+# be writable by User= above; the repo checkout is not
+WorkingDirectory=@logs@
+ExecStart=@venv@/bin/python3 @repo@/daemons/${@env_prefix@_DAEMON} -c ${@env_prefix@_CONFIG}
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+KillSignal=SIGTERM
+
+# The daemon logs to stderr/stdout unless its YAML config sets logging.file,
+# so by default everything lands in the journal:
+#   journalctl -u @name@@%i -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=@name@-%i
+
+# Basic sandboxing. Loosen ProtectSystem/ProtectHome if a driver needs write
+# access outside @etc@, @logs@ (e.g. a serial device node
+# under /dev is unaffected by these two).
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

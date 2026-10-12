@@ -1,0 +1,5 @@
+# Rendered by `@name@ install`. Lets @ops_group@ members enable and disable
+# @name@@<instance> units at boot without a password. The helper validates the
+# instance name and refuses anything that is not a deployed instance, so this
+# does not grant control of other units.
+%@ops_group@ ALL=(root) NOPASSWD: /usr/local/sbin/@name@-enable

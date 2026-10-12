@@ -14,6 +14,7 @@ from typing import Optional
 
 from . import instances as inst
 from . import units
+from .installer import _render
 from .instances import Paths
 from .output import paint
 
@@ -136,11 +137,12 @@ def _unit_and_polkit(r: Report, paths: Paths) -> None:
     unit_file = product.unit_template
     polkit_rule = product.polkit_rule
     r.section("Unit and polkit")
-    repo_unit = paths.repo / "systemd" / unit_file.name
     if unit_file.is_file():
         r.ok(f"{unit_file} installed")
-        if repo_unit.is_file() and not filecmp.cmp(unit_file, repo_unit, shallow=False):
-            r.warn(f"installed unit differs from {repo_unit}")
+        # Against what install would write now, not a committed copy: that is
+        # what catches a host whose unit predates a template change
+        if unit_file.read_text(encoding="utf-8") != _render("unit.service", product, paths):
+            r.warn("installed unit differs from what install would write")
             r.hint(install)
     else:
         r.bad(f"{unit_file} is missing")
@@ -160,9 +162,9 @@ def _unit_and_polkit(r: Report, paths: Paths) -> None:
         r.hint(f"sudo {product.name} doctor")
     else:
         r.ok(f"{polkit_rule} installed")
-        if f'indexOf("{product.name}@")' not in rule:
-            r.bad(f"the installed polkit rule does not match {product.name}@ units")
-            r.hint(f"it is probably the pre-rename copy; {install}")
+        if rule != _render("polkit.rules", product, paths):
+            r.bad("the installed polkit rule differs from what install would write")
+            r.hint(f"it may be a pre-rename copy; {install}")
     legacy_rule = product.legacy_polkit_path
     if _is_file(legacy_rule):
         r.warn(f"the old {legacy_rule.name} is still installed "
