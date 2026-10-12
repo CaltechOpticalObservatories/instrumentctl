@@ -12,12 +12,19 @@ dependencies = [
     "pyyaml",
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["instrumentctl"]
 
 [tool.setuptools.package-data]
 "instrumentctl" = ["templates/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [tool.pylint.format]
 max-line-length = 100

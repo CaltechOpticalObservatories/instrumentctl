@@ -71,6 +71,16 @@ An instance is a name with three files behind it: `<repo>/systemd/instances/
 <name>.yaml`, and their deployed copies under `/etc/<name>`. Deployed means the
 `.env` is in `/etc/<name>/instances/`, which is what the template unit reads.
 
+## Tests
+
+```bash
+uv run --extra test pytest
+```
+
+They build a throwaway host tree and exercise real directory reads, stubbing
+only systemd. The rendering tests assert that no `@placeholder@` survives,
+which is what catches a template gaining a variable nobody wired up.
+
 ## Host setup
 
 `<name> install`, as root, converges a host: it creates the ops group and the
