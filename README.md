@@ -49,6 +49,7 @@ Everything except `name` is optional.
 | key | default | what it does |
 | --- | --- | --- |
 | `name` | required | the command, the unit (`<name>@.service`), and `/opt/<name>/app`, `/opt/<name>/venv`, `/etc/<name>` |
+| `display_name` | `name` | the instrument's proper name, as it reads in `systemctl status` |
 | `user` | `name` | the account the daemons run as |
 | `ops_group` | `<name>-ops` | the group that may start, stop and deploy without a password |
 | `env_prefix` | `NAME` | instance files set `<PREFIX>_DAEMON`, `_CONFIG` and `_HOST`; operators override paths with `<PREFIX>_REPO_DIR`, `_VENV_DIR`, `_ETC_DIR` |
@@ -70,5 +71,24 @@ An instance is a name with three files behind it: `<repo>/systemd/instances/
 <name>.yaml`, and their deployed copies under `/etc/<name>`. Deployed means the
 `.env` is in `/etc/<name>/instances/`, which is what the template unit reads.
 
-Host setup, meaning the user, the group, the unit file, the polkit rule and the
-venv, is still an `install.sh` in each instrument. Nothing here needs root.
+## Host setup
+
+`<name> install`, as root, converges a host: it creates the ops group and the
+daemon account, enrols operators, makes `/etc/<name>`, `/etc/<name>/instances`
+and `/var/log/<name>` setgid, seeds `secrets.env` and the host role file, and
+renders the template unit, the polkit rule, the sudoers drop-in and the two
+helper scripts from the same config the rest of the CLI reads. It is safe to
+re-run and reports only what it changes.
+
+Building the virtualenv is not its job, since this code lives inside it. Each
+instrument keeps a short `install.sh` that bootstraps uv, runs `uv sync`, and
+hands over:
+
+```bash
+"$UV_BIN" sync --all-packages
+exec "$VENV_DIR/bin/<name>" install "$@"
+```
+
+Everything else needs no root. `doctor` compares the installed unit and polkit
+rule against what `install` would write now, so a host whose unit predates a
+template change is reported rather than silently stale.

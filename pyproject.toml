@@ -16,6 +16,9 @@ dependencies = [
 where = ["src"]
 include = ["instrumentctl"]
 
+[tool.setuptools.package-data]
+"instrumentctl" = ["templates/*"]
+
 [tool.pylint.format]
 max-line-length = 100
 
