@@ -1,0 +1,24 @@
+# Everything instrumentctl needs to know about one instrument. Copy this
+# beside the console script that calls instrumentctl.run(), and edit.
+#
+# name is the only required key. Every other line is commented out showing
+# the default it falls back to, where <name> is the name set below. The
+# remaining optional tables are in the README.
+
+[instrument]
+# Lowercase, and the stem of nearly everything: the command operators type,
+# the systemd template unit (<name>@.service), and the default paths below
+name = "demo"
+
+# display_name = "<name>"       # as it reads in systemctl status
+# user = "<name>"               # unprivileged account the daemons run as
+# ops_group = "<name>-ops"      # start, stop and deploy without a password
+# env_prefix = "<NAME>"         # instance files set <PREFIX>_DAEMON and _HOST
+# docs_url = ""                 # Documentation= in the unit
+
+# Where this instrument lives on a host
+[paths]
+# etc = "/etc/<name>"           # configs, instance files, secrets.env
+# venv = "/opt/<name>/venv"     # the interpreter the daemons run under
+# repo = "/opt/<name>/app"      # the checkout holding daemons/ and config/
+# logs = "/var/log/<name>"      # daemons' own log files

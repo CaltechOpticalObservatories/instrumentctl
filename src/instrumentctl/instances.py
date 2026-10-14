@@ -47,20 +47,24 @@ class Paths:
     repo: Path
     venv: Path
     etc: Path
+    logs: Path
 
     @classmethod
     def from_env(cls, product: Product, repo_hint: Optional[Path] = None,
                  environ: Optional[Mapping[str, str]] = None) -> "Paths":
-        """Build from <PREFIX>_REPO_DIR / _VENV_DIR / _ETC_DIR."""
+        """Resolve each path: <PREFIX>_*_DIR, then instrument.toml, then default."""
         environ = os.environ if environ is None else environ
-        repo = environ.get(product.env_key("REPO_DIR"))
+
+        def resolve_dir(key: str, configured: Optional[str], default: str) -> Path:
+            return Path(environ.get(product.env_key(key)) or configured or default)
+
         return cls(
             product=product,
-            repo=Path(repo) if repo else _default_repo_dir(product, repo_hint),
-            venv=Path(environ.get(product.env_key("VENV_DIR"),
-                                  f"/opt/{product.name}/venv")),
-            etc=Path(environ.get(product.env_key("ETC_DIR"),
-                                 f"/etc/{product.name}")),
+            repo=resolve_dir("REPO_DIR", product.repo_dir,
+                             str(_default_repo_dir(product, repo_hint))),
+            venv=resolve_dir("VENV_DIR", product.venv_dir, f"/opt/{product.name}/venv"),
+            etc=resolve_dir("ETC_DIR", product.etc_dir, f"/etc/{product.name}"),
+            logs=resolve_dir("LOGS_DIR", product.logs_dir, f"/var/log/{product.name}"),
         )
 
     @property
@@ -77,6 +81,10 @@ class Paths:
     def secrets(self) -> Path:
         """Shared secrets, read by every unit."""
         return self.etc / "secrets.env"
+
+    def config(self, instance: str) -> Path:
+        """An instance's deployed config, which the unit passes to the daemon."""
+        return self.etc / f"{instance}.yaml"
 
 
 def host_role(paths: Paths) -> str:
@@ -172,11 +180,10 @@ def required_secrets(paths: Paths) -> Dict[str, List[str]]:
         name: ["every daemon (broker login)"] for name in _broker_secrets()
     }
     for instance in deployed(paths):
-        env = read_env(paths.instances / f"{instance}.env")
-        config = env.get(paths.product.env_key("CONFIG"), "")
-        if not config or not Path(config).is_file():
+        config = paths.config(instance)
+        if not config.is_file():
             continue
-        parsed = yaml.safe_load(Path(config).read_text(encoding="utf-8")) or {}
+        parsed = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
         for key, variable in _secret_keys(parsed, paths.product.secret_key_suffix):
             needed.setdefault(variable, []).append(f"{instance} ({key})")
     return needed

@@ -18,8 +18,6 @@ from .installer import _render
 from .instances import Paths
 from .output import paint
 
-LOG_DIR_TEMPLATE = "/var/log/{name}"
-
 
 class Report:
     """Collects ok/FAIL/warn lines; FAILs decide the exit status."""
@@ -214,8 +212,7 @@ def _sudo(r: Report, paths: Paths) -> None:
 def _paths(r: Report, paths: Paths) -> None:
     install = _install_hint(paths)
     r.section("Paths")
-    log_dir = Path(LOG_DIR_TEMPLATE.format(name=paths.product.name))
-    for directory in (paths.etc, paths.instances, log_dir):
+    for directory in (paths.etc, paths.instances, paths.logs):
         if directory.is_dir():
             r.ok(f"{directory} exists ({_owner(directory)})")
         else:
@@ -246,14 +243,18 @@ def _deployed(r: Report, paths: Paths) -> None:
         env_file = paths.instances / f"{name}.env"
         env = inst.read_env(env_file)
         script = env.get(product.env_key("DAEMON"), "")
-        config = env.get(product.env_key("CONFIG"), "")
+        config = paths.config(name)
         repo_env = paths.repo_instances / f"{name}.env"
+        if env.get(product.env_key("CONFIG")):
+            r.warn(f"{name}: {env_file} sets {product.env_key('CONFIG')}, "
+                   f"which is no longer read; the config path is {config}")
+            r.hint(f"{product.name} deploy {name}")
         if not script:
             r.bad(f"{name}: {env_file} sets no {product.env_key('DAEMON')}")
         elif not (paths.repo / "daemons" / script).is_file():
             r.bad(f"{name}: daemon script {paths.repo}/daemons/{script} does not exist")
-        elif not config or not Path(config).is_file():
-            r.bad(f"{name}: config {config or '<unset>'} does not exist")
+        elif not config.is_file():
+            r.bad(f"{name}: config {config} does not exist")
             r.hint(f"{product.name} deploy {name}")
         elif state[name].active == "active":
             r.ok(f"{name}: running")

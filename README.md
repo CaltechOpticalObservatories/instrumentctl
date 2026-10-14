@@ -44,15 +44,20 @@ that locates the checkout, which is what makes the deployed CLI follow a
 
 ## Configuration
 
-Everything except `name` is optional.
+Everything except `name` is optional. `instrument.toml.example` lists the
+common keys with their defaults, ready to copy.
 
 | key | default | what it does |
 | --- | --- | --- |
-| `name` | required | the command, the unit (`<name>@.service`), and `/opt/<name>/app`, `/opt/<name>/venv`, `/etc/<name>` |
+| `name` | required | the command, the unit (`<name>@.service`), and the default paths below |
 | `display_name` | `name` | the instrument's proper name, as it reads in `systemctl status` |
 | `user` | `name` | the account the daemons run as |
 | `ops_group` | `<name>-ops` | the group that may start, stop and deploy without a password |
-| `env_prefix` | `NAME` | instance files set `<PREFIX>_DAEMON`, `_CONFIG` and `_HOST`; operators override paths with `<PREFIX>_REPO_DIR`, `_VENV_DIR`, `_ETC_DIR` |
+| `env_prefix` | `NAME` | instance files set `<PREFIX>_DAEMON` and `_HOST`; a host overrides a path with `<PREFIX>_ETC_DIR`, `_VENV_DIR`, `_REPO_DIR` or `_LOGS_DIR` |
+| `paths.etc` | `/etc/<name>` | configs, instance files and `secrets.env` |
+| `paths.venv` | `/opt/<name>/venv` | the interpreter the daemons run under |
+| `paths.repo` | `/opt/<name>/app` | the checkout holding `daemons/` and `config/` |
+| `paths.logs` | `/var/log/<name>` | the daemons' own log files |
 | `docs_url` | none | linked from `--help` |
 | `secrets.key_suffix` | `_env` | a config key ending in this names the variable holding a credential |
 | `help.example_instance` | `<instance>` | used in `--help`, where a real name beats a placeholder |

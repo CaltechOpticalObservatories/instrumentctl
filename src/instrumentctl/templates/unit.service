@@ -3,8 +3,8 @@
 #
 # One template unit runs every daemon. "%i" is the instance name, so
 # `systemctl start @name@@<instance>` reads @etc@/instances/<instance>.env for
-# the daemon script (@env_prefix@_DAEMON, relative to daemons/) and the config
-# to pass it (@env_prefix@_CONFIG).
+# the daemon script (@env_prefix@_DAEMON, relative to daemons/) and passes it
+# @etc@/<instance>.yaml.
 
 [Unit]
 Description=@display_name@ hardware daemon (%i)
@@ -27,7 +27,7 @@ EnvironmentFile=-@etc@/secrets.env
 # Drivers write their own .log next to the working directory, so this has to
 # be writable by User= above; the repo checkout is not
 WorkingDirectory=@logs@
-ExecStart=@venv@/bin/python3 @repo@/daemons/${@env_prefix@_DAEMON} -c ${@env_prefix@_CONFIG}
+ExecStart=@venv@/bin/python3 @repo@/daemons/${@env_prefix@_DAEMON} -c @etc@/%i.yaml
 
 Restart=on-failure
 RestartSec=5
