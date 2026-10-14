@@ -93,12 +93,6 @@ def _deploy_plan(paths: Paths, names: List[str],
                  "deploy it there, or pass --any-host")
             problems += 1
             continue
-        config = inst.read_env(env_src).get(paths.product.env_key("CONFIG"), "")
-        if not config:
-            _err(paths.product,
-                 f"{env_src} sets no {paths.product.env_key('CONFIG')}")
-            problems += 1
-            continue
         found = inst.repo_configs(paths, name)
         if len(found) != 1:
             where = ", ".join(str(p) for p in found) or "none"
@@ -107,7 +101,7 @@ def _deploy_plan(paths: Paths, names: List[str],
             problems += 1
             continue
         plan.append(_Deployment(name, env_src, paths.instances / f"{name}.env",
-                                found[0], Path(config)))
+                                found[0], paths.config(name)))
     return None if problems else plan
 
 
@@ -341,17 +335,14 @@ def _files(paths: Paths, name: str) -> List[Tuple[str, str]]:
         return [("instance", f"{env_file} " + paint(f"(unreadable: {exc.strerror})", "31"))]
     rows = [("daemon", env.get(paths.product.env_key("DAEMON"), "?")),
             ("instance", str(env_file))]
-    config = env.get(paths.product.env_key("CONFIG"), "")
-    if not config:
-        rows.append(("config", paint("not set in the instance file", "31")))
-        return rows
+    config = paths.config(name)
     note = ""
     found = inst.repo_configs(paths, name)
-    if not Path(config).is_file():
+    if not config.is_file():
         note = paint(" (missing)", "31")
-    elif len(found) == 1 and Path(config).read_bytes() != found[0].read_bytes():
+    elif len(found) == 1 and config.read_bytes() != found[0].read_bytes():
         note = paint(f" (differs from {found[0].relative_to(paths.repo)})", "33")
-    rows.append(("config", config + note))
+    rows.append(("config", str(config) + note))
     return rows
 
 

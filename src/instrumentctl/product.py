@@ -4,9 +4,11 @@ Everything that differs between instruments is here, so the rest of the package
 is about deploying daemons. Each instrument ships an ``instrument.toml`` and
 passes it to :func:`instrumentctl.run`.
 
-These are identity, not operator settings. Where an operator needs to override
-something, such as a non-standard checkout path, that stays an environment
-variable on ``Paths``.
+Identity lives in ``[instrument]``. A deployment that does not use the
+``/etc/<name>``, ``/opt/<name>`` and ``/var/log/<name>`` defaults records that
+in ``[paths]``, so the choice is in the instrument's repository rather than in
+each operator's environment. The matching ``<PREFIX>_*_DIR`` variables still
+win over both, for a one-off run against a tree somewhere else.
 """
 from __future__ import annotations
 
@@ -44,6 +46,11 @@ class Product:  # pylint: disable=too-many-instance-attributes
     # so a host that predates a rename can be recognised
     legacy_unit: Optional[str] = field(default=None)
     legacy_polkit_rule: Optional[str] = field(default=None)
+    # Deployment layout, each falling back to a name-derived default
+    etc_dir: Optional[str] = field(default=None)
+    venv_dir: Optional[str] = field(default=None)
+    repo_dir: Optional[str] = field(default=None)
+    logs_dir: Optional[str] = field(default=None)
 
     @classmethod
     def load(cls, config: "ConfigSource") -> "Product":
@@ -57,6 +64,7 @@ class Product:  # pylint: disable=too-many-instance-attributes
         secrets = data.get("secrets", {})
         legacy = data.get("legacy", {})
         help_text = data.get("help", {})
+        paths = data.get("paths", {})
         return cls(
             name=instrument["name"],
             display_name=instrument.get("display_name",
@@ -70,6 +78,10 @@ class Product:  # pylint: disable=too-many-instance-attributes
             example_subsystem=help_text.get("example_subsystem", "<subsystem>"),
             legacy_unit=legacy.get("unit"),
             legacy_polkit_rule=legacy.get("polkit_rule"),
+            etc_dir=paths.get("etc"),
+            venv_dir=paths.get("venv"),
+            repo_dir=paths.get("repo"),
+            logs_dir=paths.get("logs"),
         )
 
     def unit(self, instance: str) -> str:

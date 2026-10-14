@@ -39,7 +39,7 @@ def test_the_unit_runs_the_right_thing_as_the_right_user(product: Product,
     # Optional, so a host with no secrets file still starts
     assert f"EnvironmentFile=-{paths.secrets}" in unit
     assert (f"ExecStart={paths.venv}/bin/python3 {paths.repo}/daemons/"
-            "${DEMO_DAEMON} -c ${DEMO_CONFIG}") in unit
+            "${DEMO_DAEMON} -c " + str(paths.etc) + "/%i.yaml") in unit
 
 
 def test_the_polkit_rule_is_scoped_to_our_units_and_group(product: Product,

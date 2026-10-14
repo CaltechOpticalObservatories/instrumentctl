@@ -56,7 +56,6 @@ def paths_fixture(tmp_path: pathlib.Path, product: Product) -> Paths:
     for name, (host, body) in INSTANCES.items():
         (repo / "systemd" / "instances" / f"{name}.env").write_text(textwrap.dedent(f"""\
             DEMO_DAEMON=arm/runner.py
-            DEMO_CONFIG={etc}/{name}.yaml
             DEMO_HOST={host}
             """), encoding="utf-8")
         (repo / "config" / "arm" / f"{name}.yaml").write_text(body, encoding="utf-8")

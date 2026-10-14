@@ -54,18 +54,13 @@ def _render(template: str, product: Product, paths: Paths) -> str:
         "etc": str(paths.etc),
         "venv": str(paths.venv),
         "repo": str(paths.repo),
-        "logs": str(log_dir(product)),
+        "logs": str(paths.logs),
     }
     text = resources.files(__package__).joinpath("templates", template).read_text(
         encoding="utf-8")
     for key, value in values.items():
         text = text.replace(f"@{key}@", value)
     return text
-
-
-def log_dir(product: Product) -> Path:
-    """Where the daemons' own log files go, writable by the daemon account."""
-    return Path(f"/var/log/{product.name}")
 
 
 def _write(path: Path, content: str, mode: int) -> None:
@@ -126,11 +121,11 @@ def _operators(product: Product, operators: Sequence[str]) -> None:
 def _directories(product: Product, paths: Paths) -> None:
     for directory, mode in ((paths.etc, CONFIG_MODE),
                             (paths.instances, CONFIG_MODE),
-                            (log_dir(product), LOG_MODE)):
+                            (paths.logs, LOG_MODE)):
         directory.mkdir(parents=True, exist_ok=True)
         shutil.chown(directory, product.user, product.ops_group)
         directory.chmod(mode)
-    _say("ready", f"{paths.etc}, {paths.instances}, {log_dir(product)}")
+    _say("ready", f"{paths.etc}, {paths.instances}, {paths.logs}")
 
 
 def _secrets_and_role(product: Product, paths: Paths, role: Optional[str]) -> None:
