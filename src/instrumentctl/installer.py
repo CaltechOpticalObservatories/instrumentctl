@@ -16,6 +16,7 @@ import grp
 import os
 import pwd
 import shutil
+import stat
 import subprocess
 import tempfile
 from importlib import resources
@@ -181,6 +182,44 @@ def _sudoers(product: Product, paths: Paths) -> None:
     shutil.chown(product.sudoers, "root", "root")
 
 
+def _hand_to_operators(tree: Path, product: Product) -> None:
+    """Give a tree to the daemon account, writable by the ops group.
+
+    Operators already decide what the daemons run, through the configs they
+    edit and the restarts they trigger, so letting them pull and hotfix the
+    checkout grants nothing new. It spares a sudo for every edit and lets them
+    import a driver to test it.
+    """
+    if not tree.is_dir():
+        return
+    for target in (tree, *tree.rglob("*")):
+        if target.is_symlink():
+            continue
+        shutil.chown(target, product.user, product.ops_group)
+        mode = stat.S_IMODE(target.stat().st_mode)
+        # Setgid on directories so anything created later keeps the group,
+        # rather than the creating operator's own
+        target.chmod(mode | (0o2770 if target.is_dir() else 0o660))
+
+
+def _git_safe_directory(repo: Path) -> None:
+    """Let operators run git here despite the tree belonging to the daemon.
+
+    Since 2.35.2 git refuses a repository whose owner is not the caller, which
+    group permissions do not satisfy.
+    """
+    if not (repo / ".git").exists():
+        return
+    listed = subprocess.run(["git", "config", "--system", "--get-all",
+                             "safe.directory"], check=False, capture_output=True,
+                            text=True)
+    if str(repo) in listed.stdout.split():
+        return
+    subprocess.run(["git", "config", "--system", "--add", "safe.directory",
+                    str(repo)], check=False)
+    _say("git trusts", str(repo))
+
+
 def install(paths: Paths, args: argparse.Namespace) -> int:
     """Converge this host onto what the instrument needs. Root only."""
     product = paths.product
@@ -198,10 +237,10 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     _directories(product, paths)
     _secrets_and_role(product, paths, args.host_role)
     _artefacts(product, paths)
-    shutil.chown(paths.venv, product.user, product.user)
-    for child in paths.venv.rglob("*"):
-        shutil.chown(child, product.user, product.user)
-    _say("owned", f"{paths.venv} by {product.user}")
+    for tree in (paths.venv, paths.repo):
+        _hand_to_operators(tree, product)
+        _say("owned", f"{tree} by {product.user}:{product.ops_group}")
+    _git_safe_directory(paths.repo)
     subprocess.run(["systemctl", "daemon-reload"], check=False)
 
     print(f"\nHost setup complete. Operators in {product.ops_group} can now "
