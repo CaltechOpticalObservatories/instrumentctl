@@ -12,6 +12,7 @@ import stat
 from pathlib import Path
 from typing import Optional
 
+from . import hotfix
 from . import instances as inst
 from . import units
 from .installer import _render
@@ -307,6 +308,43 @@ def _placement(r: Report, paths: Paths) -> None:
                f"{' '.join(unassigned)}")
 
 
+def _hotfixes(r: Report, paths: Paths) -> None:
+    """Whether hotfix can work, and whether this host has drifted from the base."""
+    product = paths.product
+    name, base = product.name, product.git_base
+    r.section("Hotfixes")
+    token = paths.github_token
+    if not _is_file(token):
+        r.warn(f"no {token}, so hotfix cannot push")
+        r.hint("admin: put a fine-grained GitHub token there (see the README)")
+    elif hotfix.read_token(paths) is None:
+        r.bad(f"cannot read {token}, so hotfix cannot push")
+        r.hint(_install_hint(paths))
+    else:
+        r.ok(f"{token} is readable")
+    problem = hotfix.checkout_problem(paths)
+    if problem:
+        r.warn(problem)
+        return
+    branch = hotfix.current_branch(paths)
+    if hotfix.is_hotfix(paths, branch):
+        assert branch is not None
+        r.warn(f"this host is running {branch}, not {base}")
+        r.hint(f"once it is merged: {name} update")
+        waiting = hotfix.unsent(paths, branch)
+        if waiting:
+            r.warn(f"{waiting} commit(s) on {branch} are not on GitHub")
+            r.hint(f"{name} hotfix --push")
+    elif branch == base:
+        r.ok(f"{paths.repo} is on {base}")
+    else:
+        r.warn(f"{paths.repo} is on {branch or 'a detached HEAD'}, not {base}")
+    edited = hotfix.changes(paths).edited
+    if edited:
+        r.warn(f"{len(edited)} edited file(s) in {paths.repo} not saved: {' '.join(edited)}")
+        r.hint(f'{name} hotfix "what you fixed"   # or: {name} hotfix --undo')
+
+
 def doctor(paths: Paths, _args: argparse.Namespace) -> int:
     """Run every check and exit 1 if any FAILed."""
     me = pwd.getpwuid(os.geteuid()).pw_name
@@ -319,6 +357,7 @@ def doctor(paths: Paths, _args: argparse.Namespace) -> int:
     _deployed(r, paths)
     _placement(r, paths)
     _secrets(r, paths)
+    _hotfixes(r, paths)
     print()
     if r.problems == 0:
         print("No problems found.")

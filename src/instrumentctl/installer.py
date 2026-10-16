@@ -37,6 +37,7 @@ JOURNAL_GROUP = "systemd-journal"
 CONFIG_MODE = 0o2775
 LOG_MODE = 0o2750
 SECRETS_MODE = 0o660
+TOKEN_MODE = 0o640
 
 
 def _say(action: str, what: str) -> None:
@@ -220,6 +221,36 @@ def _git_safe_directory(repo: Path) -> None:
     _say("git trusts", str(repo))
 
 
+def _git_shared_repository(repo: Path) -> None:
+    """Have git leave what it writes group-writable.
+
+    Otherwise each commit leaves objects only their author can write, and the
+    next operator to commit is refused.
+    """
+    config = repo / ".git" / "config"
+    if not config.is_file():
+        return
+    current = subprocess.run(["git", "config", "--file", str(config),
+                              "core.sharedRepository"], check=False,
+                             capture_output=True, text=True)
+    if current.stdout.strip() == "group":
+        return
+    subprocess.run(["git", "config", "--file", str(config),
+                    "core.sharedRepository", "group"], check=False)
+    _say("git shares", f"{repo} with the ops group")
+
+
+def _github_token(product: Product, paths: Paths) -> None:
+    """Let operators, who push hotfixes with it, read the token, and no one else."""
+    token = paths.github_token
+    if not token.exists():
+        print(f"  {paint('no token', '33'):<22} {token}; hotfix cannot push "
+              "until one is put there (see the README)")
+        return
+    shutil.chown(token, "root", product.ops_group)
+    token.chmod(TOKEN_MODE)
+
+
 def install(paths: Paths, args: argparse.Namespace) -> int:
     """Converge this host onto what the instrument needs. Root only."""
     product = paths.product
@@ -236,7 +267,11 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     _operators(product, args.operators)
     _directories(product, paths)
     _secrets_and_role(product, paths, args.host_role)
+    _github_token(product, paths)
     _artefacts(product, paths)
+    # Before the hand-over, which gives back the config git rewrites as root
+    _git_shared_repository(paths.repo)
+
     for tree in (paths.venv, paths.repo):
         _hand_to_operators(tree, product)
         _say("owned", f"{tree} by {product.user}:{product.ops_group}")

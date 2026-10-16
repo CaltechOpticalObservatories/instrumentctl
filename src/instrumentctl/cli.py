@@ -9,7 +9,7 @@ import argparse
 from pathlib import Path
 from typing import List, Optional
 
-from . import commands
+from . import commands, hotfix
 from .doctor import doctor
 from .installer import install
 from .instances import Paths
@@ -35,6 +35,8 @@ def _epilog(product: Product) -> str:
         (f"restart {instance}", f"e.g. after editing {etc}/{instance}.yaml"),
         (f"logs {instance} -f", "follow its log"),
         ("doctor", "why isn't it working?"),
+        ('hotfix "what you fixed"', "save an edit to the code here and send it for review"),
+        ("update", "back to the reviewed code, once the hotfix is merged"),
     ]
     width = max(len(command) for command, _ in lines) + len(name) + 3
     body = "\n".join(f"  {name + ' ' + command:<{width}}{note}" for command, note in lines)
@@ -111,6 +113,30 @@ def _parser(product: Product) -> argparse.ArgumentParser:
     p.add_argument("-n", "--lines", type=int, help="how many lines (default 100)")
     p.add_argument("--since", help='e.g. "1 hour ago", today, "2026-09-21 09:00"')
     p.add_argument("-p", "--priority", help="e.g. err, warning")
+
+    p = add("hotfix", hotfix.hotfix,
+            "save edits to the code on this host and send them for review",
+            "Commit what you edited in the checkout to a hotfix branch in your name,\n"
+            "push it to GitHub and open a pull request. This host keeps running the\n"
+            f"fix; once a developer merges it, run: {product.name} update\n\n"
+            "With no description, show what is edited and not yet saved.")
+    p.add_argument("message", nargs="?", metavar="description",
+                   help='what you fixed, e.g. "ADC hangs after power cycle"')
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--push", action="store_true",
+                      help="send a saved hotfix again, e.g. after a network failure")
+    mode.add_argument("--undo", action="store_true",
+                      help="discard the edits, putting the files back as committed")
+    p.add_argument("-y", "--yes", action="store_true", help="do not ask before saving")
+
+    p = add("update", hotfix.update,
+            f"bring the code on this host up to date with {product.git_base}",
+            f"Fetch {product.git_base} from GitHub and move this host onto it. If the host is\n"
+            "running a hotfix, only once its pull request is merged. Running daemons\n"
+            "keep the old code until they are restarted.")
+    p.add_argument("--abandon", action="store_true",
+                   help="leave an unmerged hotfix, e.g. one a developer rejected; "
+                        "it stays on GitHub")
 
     add("doctor", doctor, "check this host and your account, and say what to fix")
 

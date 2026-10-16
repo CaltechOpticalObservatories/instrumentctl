@@ -62,6 +62,10 @@ common keys with their defaults, ready to copy.
 | `secrets.key_suffix` | `_env` | a config key ending in this names the variable holding a credential |
 | `help.example_instance` | `<instance>` | used in `--help`, where a real name beats a placeholder |
 | `help.example_subsystem` | `<subsystem>` | likewise |
+| `git.remote` | `origin` | where `hotfix` pushes and `update` fetches from |
+| `git.base` | `main` | the branch hosts run, and hotfixes are reviewed into |
+| `git.branch_prefix` | `hotfix/` | marks a branch `hotfix` made |
+| `git.email_domain` | the hostname | operators commit as `<user>@<this>` |
 | `legacy.unit` | none | a template unit an older version installed, reported by `doctor` |
 | `legacy.polkit_rule` | none | likewise for its polkit rule |
 
@@ -75,6 +79,39 @@ An instance is a name with three files behind it: `<repo>/systemd/instances/
 <name>.env` naming a daemon script and a config, `<repo>/config/<subsystem>/
 <name>.yaml`, and their deployed copies under `/etc/<name>`. Deployed means the
 `.env` is in `/etc/<name>/instances/`, which is what the template unit reads.
+
+## Hotfixes
+
+An operator who has to change the code at night should not need to know the
+GitHub process. They edit the checkout, restart what uses it, and run:
+
+```bash
+<name> hotfix "ADC hangs after power cycle"
+```
+
+which shows what changed, asks, commits it in their name to a branch such as
+`hotfix/2026-10-15-<host>-adc-hangs-after-power-cycle`, pushes it, and opens a
+pull request against `main`. The host keeps running the fix. Once a developer
+merges it, `<name> update` returns the host to `main`; until then it refuses,
+so a fix is never dropped by accident. On `main`, `update` just pulls.
+
+- `<name> hotfix`, with no description, lists unsaved edits.
+- `<name> hotfix --undo` puts edited files back as committed.
+- `<name> hotfix --push` retries a push or pull request that failed.
+- `<name> update --abandon` leaves an unmerged hotfix a developer rejected;
+  the branch stays, here and on GitHub.
+- `doctor` warns when a host is on a hotfix branch, has commits GitHub does
+  not, or has edits nobody saved.
+
+Pushing uses one token, so operators need no GitHub account. Make a
+fine-grained personal access token limited to the instrument's repository, with
+Contents and Pull requests read and write, and put it alone in
+`/etc/<name>/github-token`. `install` makes that file root-owned and readable
+by the ops group, which means every operator, and the daemon account, can read
+it: scope it to the one repository, and protect `main` so that it needs a
+reviewed pull request. Fine-grained tokens expire, at most a year out, and
+`doctor` cannot tell an expired one from a good one, so put the date in a
+calendar.
 
 ## Tests
 

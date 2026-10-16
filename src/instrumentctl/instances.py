@@ -82,6 +82,11 @@ class Paths:
         """Shared secrets, read by every unit."""
         return self.etc / "secrets.env"
 
+    @property
+    def github_token(self) -> Path:
+        """The token hotfix pushes and opens pull requests with."""
+        return self.etc / "github-token"
+
     def config(self, instance: str) -> Path:
         """An instance's deployed config, which the unit passes to the daemon."""
         return self.etc / f"{instance}.yaml"

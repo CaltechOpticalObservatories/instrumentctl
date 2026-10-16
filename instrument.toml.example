@@ -22,3 +22,11 @@ name = "demo"
 # venv = "/opt/<name>/venv"     # the interpreter the daemons run under
 # repo = "/opt/<name>/app"      # the checkout holding daemons/ and config/
 # logs = "/var/log/<name>"      # daemons' own log files
+
+# Where `<name> hotfix` sends fixes made on a host, and what `<name> update`
+# brings it back to
+[git]
+# remote = "origin"
+# base = "main"                 # the branch hosts run and hotfixes are reviewed into
+# branch_prefix = "hotfix/"
+# email_domain = ""             # operators commit as <user>@<this>; default: the hostname

@@ -51,6 +51,12 @@ class Product:  # pylint: disable=too-many-instance-attributes
     venv_dir: Optional[str] = field(default=None)
     repo_dir: Optional[str] = field(default=None)
     logs_dir: Optional[str] = field(default=None)
+    # Where hotfixes go: the remote and branch the host follows, the prefix
+    # that marks a hotfix branch, and the domain of the operator's commit email
+    git_remote: str = "origin"
+    git_base: str = "main"
+    git_branch_prefix: str = "hotfix/"
+    git_email_domain: str = ""
 
     @classmethod
     def load(cls, config: "ConfigSource") -> "Product":
@@ -65,6 +71,7 @@ class Product:  # pylint: disable=too-many-instance-attributes
         legacy = data.get("legacy", {})
         help_text = data.get("help", {})
         paths = data.get("paths", {})
+        git = data.get("git", {})
         return cls(
             name=instrument["name"],
             display_name=instrument.get("display_name",
@@ -82,6 +89,10 @@ class Product:  # pylint: disable=too-many-instance-attributes
             venv_dir=paths.get("venv"),
             repo_dir=paths.get("repo"),
             logs_dir=paths.get("logs"),
+            git_remote=git.get("remote", "origin"),
+            git_base=git.get("base", "main"),
+            git_branch_prefix=git.get("branch_prefix", "hotfix/"),
+            git_email_domain=git.get("email_domain", ""),
         )
 
     def unit(self, instance: str) -> str:
