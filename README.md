@@ -104,6 +104,13 @@ hands over:
 exec "$VENV_DIR/bin/<name>" install "$@"
 ```
 
+It also hands the virtualenv and the checkout to the daemon account with the
+ops group writable, so an operator can pull, hotfix and import a driver to
+test it without sudo. That grants nothing new: they already decide what the
+daemons run, through the configs they edit and the restarts they trigger. git
+is told separately, since it refuses a repository whose owner is not the
+caller no matter the permissions.
+
 Everything else needs no root. `doctor` compares the installed unit and polkit
 rule against what `install` would write now, so a host whose unit predates a
 template change is reported rather than silently stale.
