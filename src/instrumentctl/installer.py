@@ -271,6 +271,7 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     _artefacts(product, paths)
     # Before the hand-over, which gives back the config git rewrites as root
     _git_shared_repository(paths.repo)
+
     for tree in (paths.venv, paths.repo):
         _hand_to_operators(tree, product)
         _say("owned", f"{tree} by {product.user}:{product.ops_group}")
