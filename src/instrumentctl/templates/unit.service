@@ -20,9 +20,9 @@ User=@user@
 Group=@user@
 
 EnvironmentFile=@etc@/instances/%i.env
-# Optional, root-only, shared by every instance: for secrets that must not sit
-# in the instance files above, since @etc@/instances is group-readable by
-# @ops_group@. systemd reads this as root before dropping to User= below.
+# Optional, shared by every instance: for secrets, which stay out of git unlike
+# the instance files above. systemd reads this as root before dropping to User=
+# below.
 EnvironmentFile=-@etc@/secrets.env
 # Drivers write their own .log next to the working directory, so this has to
 # be writable by User= above; the repo checkout is not

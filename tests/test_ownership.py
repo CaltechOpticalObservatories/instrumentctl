@@ -1,14 +1,18 @@
-"""Handing the venv and checkout to operators."""
+"""Handing /opt/<name> and /etc/<name> to operators."""
 from __future__ import annotations
 
 import os
 import pathlib
+import shutil
 import stat
+import subprocess
+from typing import List
 from unittest import mock
 
 import pytest
 
 from instrumentctl import installer
+from instrumentctl.instances import Paths
 from instrumentctl.product import Product
 
 
@@ -22,10 +26,18 @@ def tree_fixture(tmp_path: pathlib.Path) -> pathlib.Path:
     return tmp_path
 
 
-def hand_over(tree: pathlib.Path, product: Product) -> None:
-    """Run the real mode changes; chown needs accounts a test does not have."""
-    with mock.patch.object(installer.shutil, "chown", lambda *a, **k: None):
-        installer._hand_to_operators(tree, product)
+def hand_over(tree: pathlib.Path, product: Product,
+              keep: tuple = ()) -> List[List[str]]:
+    """Run the real mode changes; chown needs accounts a test does not have.
+
+    Return the commands it ran, which are recorded rather than executed.
+    """
+    commands: List[List[str]] = []
+    with mock.patch.object(installer.shutil, "chown", lambda *a, **k: None), \
+            mock.patch.object(installer.subprocess, "run",
+                              lambda command, **k: commands.append(command)):
+        installer._hand_to_operators(tree, product, keep=keep)
+    return commands
 
 
 def mode(path: pathlib.Path) -> int:
@@ -69,3 +81,44 @@ def test_a_missing_tree_is_not_an_error(tmp_path: pathlib.Path,
                                         product: Product) -> None:
     """install runs before the checkout exists on a fresh host."""
     hand_over(tmp_path / "absent", product)
+
+
+def test_kept_files_are_left_alone(tree: pathlib.Path, product: Product) -> None:
+    """secrets.env stays root only even though it sits in a shared tree."""
+    secret = tree / "secrets.env"
+    secret.touch(mode=0o600)
+    hand_over(tree, product, keep=(secret,))
+    assert mode(secret) == 0o600
+
+
+def test_the_default_acl_skips_symlinks(tree: pathlib.Path, product: Product) -> None:
+    """The venv's python links into /usr, which must not be touched."""
+    commands = hand_over(tree, product)
+    assert commands == [["setfacl", "-R", "-P", "-m", installer.DEFAULT_ACL, str(tree)]]
+
+
+@pytest.mark.skipif(shutil.which("setfacl") is None, reason="needs the acl package")
+def test_new_files_are_group_writable_despite_the_umask(tree: pathlib.Path) -> None:
+    subprocess.run(["setfacl", "-R", "-P", "-m", installer.DEFAULT_ACL, str(tree)],
+                   check=True)
+    old = os.umask(0o077)
+    try:
+        (tree / "lib" / "added.py").touch()
+    finally:
+        os.umask(old)
+    assert mode(tree / "lib" / "added.py") & stat.S_IWGRP
+
+
+def paths_under(product: Product, venv: str, repo: str) -> Paths:
+    return Paths.from_env(product, environ={"DEMO_VENV_DIR": venv, "DEMO_REPO_DIR": repo})
+
+
+def test_the_default_layout_shares_opt_and_etc(product: Product) -> None:
+    paths = paths_under(product, "/opt/demo/venv", "/opt/demo/app")
+    assert installer.operator_trees(paths) == [pathlib.Path("/opt/demo"),
+                                               pathlib.Path("/etc/demo")]
+
+
+def test_a_venv_moved_elsewhere_is_shared_too(product: Product) -> None:
+    paths = paths_under(product, "/srv/venv", "/opt/demo/app")
+    assert installer.operator_trees(paths)[-1] == pathlib.Path("/srv/venv")

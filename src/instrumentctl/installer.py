@@ -2,9 +2,11 @@
 
 Run as root, and safe to re-run. It creates the ops group and the daemon
 account, enrols operators, makes the directories, and renders the unit, the
-polkit rule, the sudoers drop-in and the two helper scripts from the same
-``Product`` the rest of the CLI reads, so what ``doctor`` checks is what this
-wrote.
+polkit rule, the sudoers drop-in, the two helper scripts and the login profile
+from the same ``Product`` the rest of the CLI reads, so what ``doctor`` checks
+is what this wrote. Last it gives ``/opt/<name>`` and ``/etc/<name>`` to the
+ops group, all but ``secrets.env``, the GitHub token and the deploy key,
+which stay root-owned.
 
 Creating the virtualenv is not here. It has to happen before this runs, since
 this code lives inside it.
@@ -38,6 +40,11 @@ CONFIG_MODE = 0o2775
 LOG_MODE = 0o2750
 SECRETS_MODE = 0o660
 TOKEN_MODE = 0o640
+DEPLOY_KEY_MODE = 0o600
+
+# Default ACL on every directory, so new files come out group-writable whatever
+# the creating operator's umask
+DEFAULT_ACL = "d:u::rwX,d:g::rwX,d:o::rX"
 
 
 def _say(action: str, what: str) -> None:
@@ -149,12 +156,10 @@ def _secrets_and_role(product: Product, paths: Paths, role: Optional[str]) -> No
         host_file.write_text(f"{role or os.uname().nodename.split('.')[0]}\n",
                              encoding="utf-8")
         _say("recorded host", f"{host_file.read_text().strip()} in {host_file}")
-    shutil.chown(host_file, "root", product.ops_group)
-    host_file.chmod(0o644)
 
 
 def _artefacts(product: Product, paths: Paths) -> None:
-    """Render the unit, the polkit rule, the sudoers drop-in and the helpers."""
+    """Render the unit, the polkit rule, the sudoers drop-in, helpers and profile."""
     _write(product.unit_template, _render("unit.service", product, paths), 0o644)
     product.polkit_rule.parent.mkdir(parents=True, exist_ok=True)
     product.polkit_rule.parent.chmod(0o750)
@@ -163,6 +168,7 @@ def _artefacts(product: Product, paths: Paths) -> None:
     # Root runs this, so it must not live in the venv, which the daemon account
     # can write to
     _write(product.enable_helper, _render("enable-helper.sh", product, paths), 0o755)
+    _write(product.profile_script, _render("profile.sh", product, paths), 0o644)
     _sudoers(product, paths)
 
 
@@ -183,24 +189,35 @@ def _sudoers(product: Product, paths: Paths) -> None:
     shutil.chown(product.sudoers, "root", "root")
 
 
-def _hand_to_operators(tree: Path, product: Product) -> None:
+def operator_trees(paths: Paths) -> List[Path]:
+    """/opt/<name> and /etc/<name>, plus a venv or checkout moved outside them."""
+    roots = [paths.opt, paths.etc]
+    moved = [tree for tree in (paths.venv, paths.repo)
+             if not any(tree.is_relative_to(root) for root in roots)]
+    return roots + moved
+
+
+def _hand_to_operators(tree: Path, product: Product,
+                       keep: Sequence[Path] = ()) -> None:
     """Give a tree to the daemon account, writable by the ops group.
 
     Operators already decide what the daemons run, through the configs they
     edit and the restarts they trigger, so letting them pull and hotfix the
     checkout grants nothing new. It spares a sudo for every edit and lets them
-    import a driver to test it.
+    import a driver to test it. Paths in ``keep`` hold their own ownership.
     """
     if not tree.is_dir():
         return
     for target in (tree, *tree.rglob("*")):
-        if target.is_symlink():
+        if target.is_symlink() or target in keep:
             continue
         shutil.chown(target, product.user, product.ops_group)
         mode = stat.S_IMODE(target.stat().st_mode)
         # Setgid on directories so anything created later keeps the group,
         # rather than the creating operator's own
         target.chmod(mode | (0o2770 if target.is_dir() else 0o660))
+    # -P leaves symlinks alone, such as the venv's python pointing into /usr
+    subprocess.run(["setfacl", "-R", "-P", "-m", DEFAULT_ACL, str(tree)], check=True)
 
 
 def _git_safe_directory(repo: Path) -> None:
@@ -251,6 +268,14 @@ def _github_token(product: Product, paths: Paths) -> None:
     token.chmod(TOKEN_MODE)
 
 
+def _deploy_key(paths: Paths) -> None:
+    """Keep the SSH key install.sh fetches private repos with readable by root only."""
+    if not paths.deploy_key.exists():
+        return
+    shutil.chown(paths.deploy_key, "root", "root")
+    paths.deploy_key.chmod(DEPLOY_KEY_MODE)
+
+
 def install(paths: Paths, args: argparse.Namespace) -> int:
     """Converge this host onto what the instrument needs. Root only."""
     product = paths.product
@@ -261,6 +286,9 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
         print(f"{product.name}: no {paths.repo_instances}; "
               f"is {paths.repo} the checkout?")
         return 1
+    if shutil.which("setfacl") is None:
+        print(f"{product.name}: setfacl not found; install the acl package first")
+        return 1
 
     print(f"{product.name} install: {os.uname().nodename}")
     _group_and_user(product)
@@ -268,12 +296,14 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     _directories(product, paths)
     _secrets_and_role(product, paths, args.host_role)
     _github_token(product, paths)
+    _deploy_key(paths)
     _artefacts(product, paths)
     # Before the hand-over, which gives back the config git rewrites as root
     _git_shared_repository(paths.repo)
 
-    for tree in (paths.venv, paths.repo):
-        _hand_to_operators(tree, product)
+    for tree in operator_trees(paths):
+        _hand_to_operators(tree, product,
+                           keep=(paths.secrets, paths.github_token, paths.deploy_key))
         _say("owned", f"{tree} by {product.user}:{product.ops_group}")
     _git_safe_directory(paths.repo)
     subprocess.run(["systemctl", "daemon-reload"], check=False)

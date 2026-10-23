@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 
 import pytest
 
@@ -10,7 +11,7 @@ from instrumentctl.instances import Paths
 from instrumentctl.product import Product
 
 TEMPLATES = ("unit.service", "polkit.rules", "sudoers",
-             "front-door.sh", "enable-helper.sh")
+             "front-door.sh", "enable-helper.sh", "profile.sh")
 
 PLACEHOLDER = re.compile(r"@[a-z_]+@")
 
@@ -63,3 +64,14 @@ def test_the_enable_helper_only_touches_our_units(product: Product,
     assert '"demo@$name.service"' in helper
     # It must refuse a name that is not a deployed instance
     assert "deploy the instance file first" in helper
+
+
+def test_the_profile_puts_the_venv_first_on_path_once(product: Product, paths: Paths,
+                                                      tmp_path) -> None:
+    """Sourced by sh at every login, and again by nested login shells."""
+    profile = tmp_path / "profile.sh"
+    profile.write_text(_render("profile.sh", product, paths), encoding="utf-8")
+    shown = subprocess.run(["sh", "-c", f". {profile}; . {profile}; echo $PATH"],
+                           env={"PATH": "/usr/bin:/bin"}, capture_output=True,
+                           text=True, check=True).stdout.strip()
+    assert shown == f"{paths.venv}/bin:/usr/bin:/bin"
