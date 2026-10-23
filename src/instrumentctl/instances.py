@@ -16,6 +16,7 @@ import os
 import re
 import socket
 from dataclasses import dataclass
+from importlib import metadata
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
 
@@ -24,6 +25,7 @@ import yaml
 from .product import Product
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+REQUIREMENT_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
 def _default_repo_dir(product: Product, repo_hint: Optional[Path]) -> Path:
@@ -86,6 +88,11 @@ class Paths:
     def secrets(self) -> Path:
         """Shared secrets, read by every unit."""
         return self.etc / "secrets.env"
+
+    @property
+    def extras(self) -> Path:
+        """The optional dependencies install.sh syncs on this host."""
+        return self.etc / "extras"
 
     @property
     def github_token(self) -> Path:
@@ -205,6 +212,36 @@ def secrets_set(paths: Paths) -> Optional[Dict[str, str]]:
         return read_env(paths.secrets)
     except OSError:
         return None
+
+
+def recorded_extras(paths: Paths) -> List[str]:
+    """Return the extras install.sh recorded for this host, if any."""
+    if not paths.extras.is_file():
+        return []
+    return paths.extras.read_text(encoding="utf-8").split()
+
+
+def extra_requirements(requirements: Iterable[str], extra: str) -> List[str]:
+    """Return the distribution names an extra adds, from ``Requires-Dist`` lines."""
+    marker = re.compile(rf"""\bextra\s*==\s*["']{re.escape(extra)}["']""")
+    names = []
+    for line in requirements:
+        _, _, markers = line.partition(";")
+        name = REQUIREMENT_NAME_RE.match(line)
+        if name and marker.search(markers):
+            names.append(name.group(0))
+    return names
+
+
+def missing_from_venv(names: Iterable[str]) -> List[str]:
+    """Return the distributions not installed in the running interpreter."""
+    missing = []
+    for name in names:
+        try:
+            metadata.distribution(name)
+        except metadata.PackageNotFoundError:
+            missing.append(name)
+    return missing
 
 
 def resolve(targets: Iterable[str], names: List[str]) -> List[str]:

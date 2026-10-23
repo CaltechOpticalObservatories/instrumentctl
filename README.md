@@ -131,7 +131,7 @@ apt packages and host roles.
 ```bash
 sudo apt install acl git curl
 sudo git clone --recurse-submodules <repo-url> /opt/<name>/app
-sudo /opt/<name>/app/systemd/install.sh <dev-user> <operator>... [--host-role <role>]
+sudo /opt/<name>/app/systemd/install.sh <dev-user> <operator>... [--host-role <role>] [--extra <name>]
 # log out and back in, for the new groups and PATH
 sudoedit /etc/<name>/secrets.env    # the credentials doctor asks for
 sudo <name> doctor
@@ -143,9 +143,16 @@ refreshes the lock, syncs, and hands over:
 
 ```bash
 "$UV_BIN" lock --upgrade
-"$UV_BIN" sync --all-packages
-exec "$VENV_DIR/bin/<name>" install "$@"
+"$UV_BIN" sync --all-packages "${EXTRA_FLAGS[@]}"
+exec "$VENV_DIR/bin/<name>" install "${INSTALL_ARGS[@]}"
 ```
+
+A host that needs an optional dependency, such as a camera module only one
+host can build, passes `--extra <name>`. `install.sh` records it in
+`/etc/<name>/extras` once the sync succeeds, and every later run syncs with the
+recorded extras, so a plain rerun keeps them. `doctor` reports a recorded extra
+whose packages are gone from the venv, which is what a plain `uv sync` by hand
+leaves behind.
 
 `<name> install` then converges the host, reporting only what it changes:
 
@@ -174,4 +181,5 @@ through the configs they edit and the restarts they trigger. The exceptions:
 Re-run `install.sh` to enrol another operator, after a dependency change, or
 to repair a host. Adding a daemon needs none of this: `<name> deploy <instance>`.
 `doctor` compares every rendered file against what `install` would write now,
-and checks that both trees are still shared with the ops group.
+and checks that both trees are still shared with the ops group and that the
+recorded extras are installed.

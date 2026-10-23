@@ -9,6 +9,7 @@ import os
 import pwd
 import socket
 import stat
+from importlib import metadata
 from pathlib import Path
 from typing import Optional
 
@@ -228,6 +229,7 @@ def _paths(r: Report, paths: Paths) -> None:
     else:
         r.bad(f"{paths.venv}/bin/python3 is missing")
         r.hint(install)
+    _extras(r, paths)
     for tree in operator_trees(paths):
         _shared_tree(r, paths, tree)
     profile = paths.product.profile_script
@@ -239,6 +241,25 @@ def _paths(r: Report, paths: Paths) -> None:
         r.hint(install)
     else:
         r.ok(f"{profile} puts {paths.venv}/bin on PATH")
+
+
+def _extras(r: Report, paths: Paths) -> None:
+    """Whether the venv still holds the extras this host was installed with."""
+    name = paths.product.name
+    try:
+        requirements = metadata.requires(name) or []
+    except metadata.PackageNotFoundError:
+        requirements = []
+    for extra in inst.recorded_extras(paths):
+        wanted = inst.extra_requirements(requirements, extra)
+        missing = inst.missing_from_venv(wanted)
+        if not wanted:
+            r.warn(f"{paths.extras} names '{extra}', which {name} does not declare")
+        elif missing:
+            r.bad(f"extra '{extra}' is missing {' '.join(missing)} from {paths.venv}")
+            r.hint(f"{_install_hint(paths)}   # a plain uv sync removes extras")
+        else:
+            r.ok(f"extra '{extra}' installed")
 
 
 def _has_default_acl(path: Path) -> bool:
