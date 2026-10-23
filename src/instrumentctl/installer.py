@@ -5,7 +5,8 @@ account, enrols operators, makes the directories, and renders the unit, the
 polkit rule, the sudoers drop-in, the two helper scripts and the login profile
 from the same ``Product`` the rest of the CLI reads, so what ``doctor`` checks
 is what this wrote. Last it gives ``/opt/<name>`` and ``/etc/<name>`` to the
-ops group, all but ``secrets.env`` and the GitHub token, which stay root-owned.
+ops group, all but ``secrets.env``, the GitHub token and the deploy key,
+which stay root-owned.
 
 Creating the virtualenv is not here. It has to happen before this runs, since
 this code lives inside it.
@@ -39,6 +40,7 @@ CONFIG_MODE = 0o2775
 LOG_MODE = 0o2750
 SECRETS_MODE = 0o660
 TOKEN_MODE = 0o640
+DEPLOY_KEY_MODE = 0o600
 
 # Default ACL on every directory, so new files come out group-writable whatever
 # the creating operator's umask
@@ -266,6 +268,14 @@ def _github_token(product: Product, paths: Paths) -> None:
     token.chmod(TOKEN_MODE)
 
 
+def _deploy_key(paths: Paths) -> None:
+    """Keep the SSH key install.sh fetches private repos with readable by root only."""
+    if not paths.deploy_key.exists():
+        return
+    shutil.chown(paths.deploy_key, "root", "root")
+    paths.deploy_key.chmod(DEPLOY_KEY_MODE)
+
+
 def install(paths: Paths, args: argparse.Namespace) -> int:
     """Converge this host onto what the instrument needs. Root only."""
     product = paths.product
@@ -286,12 +296,14 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     _directories(product, paths)
     _secrets_and_role(product, paths, args.host_role)
     _github_token(product, paths)
+    _deploy_key(paths)
     _artefacts(product, paths)
     # Before the hand-over, which gives back the config git rewrites as root
     _git_shared_repository(paths.repo)
 
     for tree in operator_trees(paths):
-        _hand_to_operators(tree, product, keep=(paths.secrets, paths.github_token))
+        _hand_to_operators(tree, product,
+                           keep=(paths.secrets, paths.github_token, paths.deploy_key))
         _say("owned", f"{tree} by {product.user}:{product.ops_group}")
     _git_safe_directory(paths.repo)
     subprocess.run(["systemctl", "daemon-reload"], check=False)

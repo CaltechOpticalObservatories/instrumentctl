@@ -176,6 +176,9 @@ through the configs they edit and the restarts they trigger. The exceptions:
 - `secrets.env` stays `root:<ops> 660`, editable without sudo but kept out of
   the recursive hand-over;
 - the GitHub token is root-owned and only readable by the ops group;
+- `/etc/<name>/deploy-key` is `root:root 600`: the SSH key `install.sh` fetches
+  a private dependency with, registered as a read-only deploy key on that repo
+  and copied to every host, since `uv lock` resolves every extra everywhere;
 - `/var/log/<name>` is written only by the daemons.
 
 Re-run `install.sh` to enrol another operator, after a dependency change, or

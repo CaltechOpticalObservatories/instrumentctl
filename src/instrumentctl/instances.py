@@ -90,6 +90,11 @@ class Paths:
         return self.etc / "secrets.env"
 
     @property
+    def deploy_key(self) -> Path:
+        """The SSH key install.sh fetches private dependencies with."""
+        return self.etc / "deploy-key"
+
+    @property
     def extras(self) -> Path:
         """The optional dependencies install.sh syncs on this host."""
         return self.etc / "extras"
