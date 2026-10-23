@@ -5,7 +5,7 @@ account, enrols operators, makes the directories, and renders the unit, the
 polkit rule, the sudoers drop-in, the two helper scripts and the login profile
 from the same ``Product`` the rest of the CLI reads, so what ``doctor`` checks
 is what this wrote. Last it gives ``/opt/<name>`` and ``/etc/<name>`` to the
-ops group, all but ``secrets.env`` and the GitHub token.
+ops group, all but ``secrets.env`` and the GitHub token, which stay root-owned.
 
 Creating the virtualenv is not here. It has to happen before this runs, since
 this code lives inside it.
@@ -37,7 +37,7 @@ JOURNAL_GROUP = "systemd-journal"
 # the creating user's own
 CONFIG_MODE = 0o2775
 LOG_MODE = 0o2750
-SECRETS_MODE = 0o600
+SECRETS_MODE = 0o660
 TOKEN_MODE = 0o640
 
 # Default ACL on every directory, so new files come out group-writable whatever
@@ -144,8 +144,9 @@ def _secrets_and_role(product: Product, paths: Paths, role: Optional[str]) -> No
             f"# `{product.name} doctor` lists the ones this host needs.\n",
             encoding="utf-8")
         _say("created", str(paths.secrets))
-    # Root only, edited with sudoedit; systemd reads it as root for the units
-    shutil.chown(paths.secrets, "root", "root")
+    # root-owned and group-readable: requiring sudo for one file pushes people
+    # into putting credentials in the instance files, which operators can read
+    shutil.chown(paths.secrets, "root", product.ops_group)
     paths.secrets.chmod(SECRETS_MODE)
 
     host_file = paths.etc / "host"

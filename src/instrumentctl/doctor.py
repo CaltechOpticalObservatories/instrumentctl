@@ -335,16 +335,12 @@ def _secrets(r: Report, paths: Paths) -> None:
         r.warn(f"cannot read {paths.secrets}, so the credentials below are unchecked")
         r.hint(f"sudo {paths.product.name} doctor")
         return
-    if os.geteuid() != 0:
-        r.warn(f"{paths.secrets} is readable without sudo; it should be root only")
-        r.hint(_install_hint(paths))
     for variable in sorted(needed):
         if present.get(variable):
             r.ok(f"{variable} is set")
         else:
             r.bad(f"{variable} is unset, needed by {'; '.join(needed[variable])}")
-            r.hint(f"sudoedit {paths.secrets} to add {variable}=<value>, "
-                   "then restart that daemon")
+            r.hint(f"add {variable}=<value> to {paths.secrets}, then restart that daemon")
 
 
 def _placement(r: Report, paths: Paths) -> None:

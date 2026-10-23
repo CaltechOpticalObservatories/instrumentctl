@@ -133,8 +133,8 @@ sudo apt install acl git curl
 sudo git clone --recurse-submodules <repo-url> /opt/<name>/app
 sudo /opt/<name>/app/systemd/install.sh <dev-user> <operator>... [--host-role <role>] [--extra <name>]
 # log out and back in, for the new groups and PATH
-sudoedit /etc/<name>/secrets.env    # the credentials doctor asks for
-sudo <name> doctor
+$EDITOR /etc/<name>/secrets.env    # the credentials doctor asks for
+<name> doctor
 ```
 
 Each instrument keeps a short `install.sh`, since building the virtualenv has
@@ -173,8 +173,8 @@ Operators can therefore pull, hotfix, sync the venv and edit configs without
 sudo. That grants nothing new: they already decide what the daemons run,
 through the configs they edit and the restarts they trigger. The exceptions:
 
-- `secrets.env` is `root:root 600`, edited with `sudoedit`. systemd reads it as
-  root, so the daemons are unaffected; a plain `doctor` cannot check it.
+- `secrets.env` stays `root:<ops> 660`, editable without sudo but kept out of
+  the recursive hand-over;
 - the GitHub token is root-owned and only readable by the ops group;
 - `/var/log/<name>` is written only by the daemons.
 
