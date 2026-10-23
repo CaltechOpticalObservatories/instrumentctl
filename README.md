@@ -79,6 +79,9 @@ An instance is a name with three files behind it: `<repo>/systemd/instances/
 <name>.env` naming a daemon script and a config, `<repo>/config/<subsystem>/
 <name>.yaml`, and their deployed copies under `/etc/<name>`. Deployed means the
 `.env` is in `/etc/<name>/instances/`, which is what the template unit reads.
+`<name> undeploy <instance>` reverses it: stop, drop from the boot set, and
+remove both deployed files, refusing a config that differs from the repo unless
+`--force`.
 
 ## Hotfixes
 

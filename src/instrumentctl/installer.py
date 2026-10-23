@@ -224,18 +224,32 @@ def _git_safe_directory(repo: Path) -> None:
     """Let operators run git here despite the tree belonging to the daemon.
 
     Since 2.35.2 git refuses a repository whose owner is not the caller, which
-    group permissions do not satisfy.
+    group permissions do not satisfy. Each submodule is a repository of its own
+    and needs the same.
     """
     if not (repo / ".git").exists():
         return
     listed = subprocess.run(["git", "config", "--system", "--get-all",
                              "safe.directory"], check=False, capture_output=True,
-                            text=True)
-    if str(repo) in listed.stdout.split():
-        return
-    subprocess.run(["git", "config", "--system", "--add", "safe.directory",
-                    str(repo)], check=False)
-    _say("git trusts", str(repo))
+                            text=True).stdout.split()
+    for tree in (repo, *_submodules(repo)):
+        if str(tree) in listed:
+            continue
+        subprocess.run(["git", "config", "--system", "--add", "safe.directory",
+                        str(tree)], check=False)
+        _say("git trusts", str(tree))
+
+
+def _submodules(repo: Path) -> List[Path]:
+    """Return the checkout's submodule paths, read from .gitmodules."""
+    gitmodules = repo / ".gitmodules"
+    if not gitmodules.is_file():
+        return []
+    # Reading the file needs no ownership check, unlike asking git about the repo
+    listed = subprocess.run(["git", "config", "--file", str(gitmodules), "--get-regexp",
+                             r"^submodule\..*\.path$"], check=False, capture_output=True,
+                            text=True).stdout
+    return [repo / line.split(maxsplit=1)[1] for line in listed.splitlines()]
 
 
 def _git_shared_repository(repo: Path) -> None:

@@ -44,6 +44,20 @@ def _epilog(product: Product) -> str:
     return f"examples:\n{body}\n\nEvery subcommand takes --help.{guide}\n"
 
 
+def _add_undeploy(add, product: Product) -> None:
+    p = add("undeploy", commands.undeploy,
+            "stop instances, drop them from the boot set and remove their files here",
+            f"Stop each instance, stop starting it at boot, and remove its .env and\n"
+            f"config from /etc/{product.name}. For an instance the repo renamed or\n"
+            "dropped, or one this host no longer runs.\n\n"
+            "A deployed config that differs from the repo, or has no repo copy, is\n"
+            "refused unless --force, since it may hold this host's hardware values.")
+    p.add_argument("names", nargs="+", metavar="name", help="deployed instances")
+    p.add_argument("--force", action="store_true",
+                   help="remove deployed configs that differ from the repo")
+    p.add_argument("-n", "--dry-run", action="store_true", help="print what would happen")
+
+
 def _parser(product: Product) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=product.name,
@@ -79,6 +93,8 @@ def _parser(product: Product) -> argparse.ArgumentParser:
     p.add_argument("--no-start", action="store_true", help="do not start them now")
     p.add_argument("--no-enable", action="store_true", help="do not start them at boot")
     p.add_argument("-n", "--dry-run", action="store_true", help="print what would happen")
+
+    _add_undeploy(add, product)
 
     for verb, text in (("start", "start daemons (already-running ones are left alone)"),
                        ("stop", "stop daemons, in reverse order (they still start at boot)"),
