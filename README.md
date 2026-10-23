@@ -125,29 +125,53 @@ which is what catches a template gaining a variable nobody wired up.
 
 ## Host setup
 
-`<name> install`, as root, converges a host: it creates the ops group and the
-daemon account, enrols operators, makes `/etc/<name>`, `/etc/<name>/instances`
-and `/var/log/<name>` setgid, seeds `secrets.env` and the host role file, and
-renders the template unit, the polkit rule, the sudoers drop-in and the two
-helper scripts from the same config the rest of the CLI reads. It is safe to
-re-run and reports only what it changes.
-
-Building the virtualenv is not its job, since this code lives inside it. Each
-instrument keeps a short `install.sh` that bootstraps uv, runs `uv sync`, and
-hands over:
+Every instrument installs the same way. The instrument's own docs add only its
+apt packages and host roles.
 
 ```bash
+sudo apt install acl git curl
+sudo git clone --recurse-submodules <repo-url> /opt/<name>/app
+sudo /opt/<name>/app/systemd/install.sh <dev-user> <operator>... [--host-role <role>]
+# log out and back in, for the new groups and PATH
+sudoedit /etc/<name>/secrets.env    # the credentials doctor asks for
+sudo <name> doctor
+```
+
+Each instrument keeps a short `install.sh`, since building the virtualenv has
+to happen before this code exists on the host. It bootstraps a pinned uv,
+refreshes the lock, syncs, and hands over:
+
+```bash
+"$UV_BIN" lock --upgrade
 "$UV_BIN" sync --all-packages
 exec "$VENV_DIR/bin/<name>" install "$@"
 ```
 
-It also hands the virtualenv and the checkout to the daemon account with the
-ops group writable, so an operator can pull, hotfix and import a driver to
-test it without sudo. That grants nothing new: they already decide what the
-daemons run, through the configs they edit and the restarts they trigger. git
-is told separately, since it refuses a repository whose owner is not the
-caller no matter the permissions.
+`<name> install` then converges the host, reporting only what it changes:
 
-Everything else needs no root. `doctor` compares the installed unit and polkit
-rule against what `install` would write now, so a host whose unit predates a
-template change is reported rather than silently stale.
+- creates the ops group and the daemon account, and enrols each user named
+  (the dev user included) into the ops group and `systemd-journal`;
+- makes `/etc/<name>`, `/etc/<name>/instances` and `/var/log/<name>`, seeds
+  `secrets.env` and the host role file;
+- renders the template unit, the polkit rule, the sudoers drop-in, the two
+  helper scripts and `/etc/profile.d/<name>.sh`, which puts the venv's `bin`
+  on every login shell's `PATH`, so `python` and the venv's tools need no
+  `activate`;
+- gives `/opt/<name>` and `/etc/<name>` to the daemon account and the ops
+  group: group-writable, setgid, with a default ACL so files anyone adds later
+  stay group-writable whatever their umask. git is told to trust the checkout
+  and to keep what it writes group-writable.
+
+Operators can therefore pull, hotfix, sync the venv and edit configs without
+sudo. That grants nothing new: they already decide what the daemons run,
+through the configs they edit and the restarts they trigger. The exceptions:
+
+- `secrets.env` is `root:root 600`, edited with `sudoedit`. systemd reads it as
+  root, so the daemons are unaffected; a plain `doctor` cannot check it.
+- the GitHub token is root-owned and only readable by the ops group;
+- `/var/log/<name>` is written only by the daemons.
+
+Re-run `install.sh` to enrol another operator, after a dependency change, or
+to repair a host. Adding a daemon needs none of this: `<name> deploy <instance>`.
+`doctor` compares every rendered file against what `install` would write now,
+and checks that both trees are still shared with the ops group.

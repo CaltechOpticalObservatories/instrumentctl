@@ -68,6 +68,11 @@ class Paths:
         )
 
     @property
+    def opt(self) -> Path:
+        """The instrument's tree under /opt, holding the venv and checkout by default."""
+        return Path("/opt") / self.product.name
+
+    @property
     def instances(self) -> Path:
         """Deployed instance files, read by the template unit."""
         return self.etc / "instances"

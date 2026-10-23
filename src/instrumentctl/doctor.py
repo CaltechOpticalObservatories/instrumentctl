@@ -15,7 +15,7 @@ from typing import Optional
 from . import hotfix
 from . import instances as inst
 from . import units
-from .installer import _render
+from .installer import _render, operator_trees
 from .instances import Paths
 from .output import paint
 
@@ -228,6 +228,41 @@ def _paths(r: Report, paths: Paths) -> None:
     else:
         r.bad(f"{paths.venv}/bin/python3 is missing")
         r.hint(install)
+    for tree in operator_trees(paths):
+        _shared_tree(r, paths, tree)
+    profile = paths.product.profile_script
+    if not _is_file(profile):
+        r.warn(f"no {profile}, so the venv is not on operators' PATH")
+        r.hint(install)
+    elif profile.read_text(encoding="utf-8") != _render("profile.sh", paths.product, paths):
+        r.warn(f"{profile} differs from what install would write")
+        r.hint(install)
+    else:
+        r.ok(f"{profile} puts {paths.venv}/bin on PATH")
+
+
+def _has_default_acl(path: Path) -> bool:
+    try:
+        os.getxattr(path, "system.posix_acl_default")
+        return True
+    except OSError:
+        return False
+
+
+def _shared_tree(r: Report, paths: Paths, tree: Path) -> None:
+    """Whether the ops group owns a tree and keeps owning what is added to it."""
+    if not tree.is_dir():
+        return
+    group = paths.product.ops_group
+    st = tree.stat()
+    owned = _group_exists(group) and st.st_gid == grp.getgrnam(group).gr_gid
+    acl = _has_default_acl(tree)
+    if owned and st.st_mode & stat.S_ISGID and st.st_mode & stat.S_IWGRP and acl:
+        r.ok(f"{tree} is shared with {group}")
+    else:
+        r.bad(f"{tree} is not shared with {group} "
+              f"({_owner(tree)}, default ACL {'set' if acl else 'missing'})")
+        r.hint(_install_hint(paths))
 
 
 def _deployed(r: Report, paths: Paths) -> None:
@@ -279,12 +314,16 @@ def _secrets(r: Report, paths: Paths) -> None:
         r.warn(f"cannot read {paths.secrets}, so the credentials below are unchecked")
         r.hint(f"sudo {paths.product.name} doctor")
         return
+    if os.geteuid() != 0:
+        r.warn(f"{paths.secrets} is readable without sudo; it should be root only")
+        r.hint(_install_hint(paths))
     for variable in sorted(needed):
         if present.get(variable):
             r.ok(f"{variable} is set")
         else:
             r.bad(f"{variable} is unset, needed by {'; '.join(needed[variable])}")
-            r.hint(f"add {variable}=<value> to {paths.secrets}, then restart that daemon")
+            r.hint(f"sudoedit {paths.secrets} to add {variable}=<value>, "
+                   "then restart that daemon")
 
 
 def _placement(r: Report, paths: Paths) -> None:

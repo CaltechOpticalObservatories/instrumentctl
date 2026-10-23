@@ -24,6 +24,7 @@ SYSTEMD_DIR = Path("/etc/systemd/system")
 POLKIT_RULES_DIR = Path("/etc/polkit-1/rules.d")
 SUDOERS_DIR = Path("/etc/sudoers.d")
 SBIN_DIR = Path("/usr/local/sbin")
+PROFILE_DIR = Path("/etc/profile.d")
 
 
 # Each attribute is one fact about the instrument rather than hidden state
@@ -124,6 +125,11 @@ class Product:  # pylint: disable=too-many-instance-attributes
     def sudoers(self) -> Path:
         """The drop-in granting passwordless use of the enable helper."""
         return SUDOERS_DIR / f"{self.name}-ops"
+
+    @property
+    def profile_script(self) -> Path:
+        """Login-shell setup that puts the venv on every operator's PATH."""
+        return PROFILE_DIR / f"{self.name}.sh"
 
     @property
     def enable_helper(self) -> Path:
