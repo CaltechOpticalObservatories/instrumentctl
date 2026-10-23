@@ -122,3 +122,17 @@ def test_the_default_layout_shares_opt_and_etc(product: Product) -> None:
 def test_a_venv_moved_elsewhere_is_shared_too(product: Product) -> None:
     paths = paths_under(product, "/srv/venv", "/opt/demo/app")
     assert installer.operator_trees(paths)[-1] == pathlib.Path("/srv/venv")
+
+
+def test_submodules_are_read_from_gitmodules(tmp_path: pathlib.Path) -> None:
+    """Each one needs its own safe.directory entry."""
+    (tmp_path / ".gitmodules").write_text(
+        '[submodule "src/driver/pi"]\n\tpath = src/driver/pi\n\turl = https://x/pi\n'
+        '[submodule "external/lib"]\n\tpath = external/lib\n\turl = https://x/lib\n',
+        encoding="utf-8")
+    assert installer._submodules(tmp_path) == [tmp_path / "src/driver/pi",
+                                               tmp_path / "external/lib"]
+
+
+def test_no_gitmodules_means_no_submodules(tmp_path: pathlib.Path) -> None:
+    assert installer._submodules(tmp_path) == []

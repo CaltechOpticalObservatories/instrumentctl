@@ -1,4 +1,4 @@
-"""The operator subcommands: deploy, start/stop/restart, enable/disable,
+"""The operator subcommands: deploy, undeploy, start/stop/restart, enable/disable,
 status and logs. ``doctor`` is in its own module."""
 from __future__ import annotations
 
@@ -176,6 +176,45 @@ def deploy(paths: Paths, args: argparse.Namespace) -> int:
         print()
         print("Already running with the old files; to pick up the new ones:")
         print(f"  {paths.product.name} restart {' '.join(restart)}")
+    return rc
+
+
+def _config_is_committed(paths: Paths, name: str) -> bool:
+    """Whether the deployed config matches the repo's, so removing it loses nothing."""
+    committed = inst.repo_configs(paths, name)
+    deployed = paths.config(name)
+    return (not deployed.exists()
+            or (len(committed) == 1 and committed[0].read_bytes() == deployed.read_bytes()))
+
+
+def undeploy(paths: Paths, args: argparse.Namespace) -> int:
+    """Stop instances, drop them from the boot set, and remove their files here."""
+    product = paths.product
+    here = inst.deployed(paths)
+    unknown = [name for name in args.names if name not in here]
+    if unknown:
+        _err(product, f"not deployed on this host: {' '.join(unknown)}")
+        return 1
+    names = list(dict.fromkeys(args.names))
+    # A deployed config can hold this host's real hardware values
+    edited = [name for name in names if not _config_is_committed(paths, name)]
+    if edited and not args.force:
+        _err(product, f"deployed config differs from the repo, or the repo has none: "
+             f"{' '.join(edited)}; pass --force to remove it anyway")
+        return 1
+
+    rc = _act(product, names, "stop", args.dry_run)
+    # Before the files go: the enable helper only accepts deployed instances
+    rc |= _enable(product, names, ["--disable"], args.dry_run)
+    for name in names:
+        for path in (paths.instances / f"{name}.env", paths.config(name)):
+            if not path.exists():
+                continue
+            if args.dry_run:
+                print(f"{name:<24} would remove {path}")
+            else:
+                path.unlink()
+                print(f"{name:<24} removed {path}")
     return rc
 
 
