@@ -157,9 +157,10 @@ def _unit_and_polkit(r: Report, paths: Paths) -> None:
         r.hint(install)
     except OSError:
         # rules.d is 0750 root:polkitd on some hosts, so an operator cannot
-        # even stat inside it; unreadable means unknown, not missing
-        r.warn(f"cannot read {polkit_rule}, so the polkit rule is unchecked")
-        r.hint(f"sudo {product.name} doctor")
+        # even stat inside it; ask systemd whether the rule lets them through
+        if not _polkit_lets_me_manage(r, paths):
+            r.warn(f"cannot read {polkit_rule}, so the polkit rule is unchecked")
+            r.hint(f"sudo {product.name} doctor")
     else:
         r.ok(f"{polkit_rule} installed")
         if rule != _render("polkit.rules", product, paths):
@@ -171,6 +172,30 @@ def _unit_and_polkit(r: Report, paths: Paths) -> None:
                "(harmless, matches nothing now)")
         r.hint(f"admin: sudo rm {legacy_rule}")
     _polkit_daemon(r)
+
+
+def _polkit_lets_me_manage(r: Report, paths: Paths) -> bool:
+    """Report whether polkit lets this operator manage units; False if untestable.
+
+    reset-failed on a unit that has not failed changes nothing, but systemd
+    still asks polkit for manage-units first, so it tests the rule as installed.
+    """
+    product = paths.product
+    if os.geteuid() == 0:
+        return False
+    deployed = inst.deployed(paths)
+    state = units.states(product, deployed)
+    healthy = [name for name in deployed if state[name].active != "failed"]
+    if not healthy:
+        return False
+    unit = product.unit(healthy[0])
+    probe = units.run(["systemctl", "--no-ask-password", "reset-failed", unit], capture=True)
+    if probe.returncode == 0:
+        r.ok(f"polkit lets you start and stop {product.name}@ units")
+    else:
+        r.bad(f"polkit refused you {unit}, so every start/stop will prompt")
+        r.hint(_install_hint(paths))
+    return True
 
 
 def _polkit_daemon(r: Report) -> None:
