@@ -68,6 +68,8 @@ common keys with their defaults, ready to copy.
 | `git.email_domain` | the hostname | operators commit as `<user>@<this>` |
 | `legacy.unit` | none | a template unit an older version installed, reported by `doctor` |
 | `legacy.polkit_rule` | none | likewise for its polkit rule |
+| `dashboard.bind` | `127.0.0.1` | where the dashboard listens; `0.0.0.0` opens it to the network |
+| `dashboard.port` | `8750` | likewise |
 
 Which credentials a host needs is deliberately not configured. It is derived
 from the deployed configs and from the daemon code that reads them, so it
@@ -116,6 +118,29 @@ reviewed pull request. Fine-grained tokens expire, at most a year out, and
 `doctor` cannot tell an expired one from a good one, so put the date in a
 calendar.
 
+## Dashboard
+
+`<name> dashboard` serves a page showing every daemon deployed on the host:
+state, restarts, PID, memory, whether the config was edited there, and whether
+the checkout is on a hotfix. It refreshes every two seconds, and has start,
+stop and restart for each instance and each subsystem, which act exactly as
+the CLI's do (a subsystem stops in reverse order).
+
+It needs Flask and waitress, the `dashboard` extra: have the instrument depend
+on `instrumentctl[dashboard]`. `install` renders `<name>-dashboard.service`,
+which runs it as the daemon account; polkit lets that account, as a member of
+the ops group, start and stop the instrument's units and nothing else.
+Whether a host serves it is left to an admin:
+
+```bash
+sudo systemctl enable --now <name>-dashboard
+```
+
+There is no login. Anyone who can reach the page can stop the daemons, so it
+listens on loopback unless `[dashboard] bind` says otherwise, and that should
+only be on a private network. Each action is logged with the address it came
+from: `journalctl -u <name>-dashboard`.
+
 ## Tests
 
 ```bash
@@ -125,6 +150,15 @@ uv run --extra test pytest
 They build a throwaway host tree and exercise real directory reads, stubbing
 only systemd. The rendering tests assert that no `@placeholder@` survives,
 which is what catches a template gaining a variable nobody wired up.
+
+To see the dashboard without systemd, run it against a pretend host whose
+daemons start, stop, crash and restart in memory:
+
+```bash
+uv run --extra test python scripts/dashboard_demo.py    # then open http://127.0.0.1:8750/
+```
+
+`--hotfix` puts the pretend checkout on a hotfix branch, to see those warnings.
 
 ## Host setup
 

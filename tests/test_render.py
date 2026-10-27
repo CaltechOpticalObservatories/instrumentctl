@@ -11,7 +11,8 @@ from instrumentctl.instances import Paths
 from instrumentctl.product import Product
 
 TEMPLATES = ("unit.service", "polkit.rules", "sudoers",
-             "front-door.sh", "enable-helper.sh", "profile.sh")
+             "front-door.sh", "enable-helper.sh", "profile.sh",
+             "dashboard.service", "dashboard.html")
 
 PLACEHOLDER = re.compile(r"@[a-z_]+@")
 
@@ -75,3 +76,11 @@ def test_the_profile_puts_the_venv_first_on_path_once(product: Product, paths: P
                            env={"PATH": "/usr/bin:/bin"}, capture_output=True,
                            text=True, check=True).stdout.strip()
     assert shown == f"{paths.venv}/bin:/usr/bin:/bin"
+
+
+def test_the_dashboard_runs_as_the_account_polkit_trusts(product: Product,
+                                                         paths: Paths) -> None:
+    """The daemon account is in the ops group, which may start and stop our units."""
+    unit = _render("dashboard.service", product, paths)
+    assert "User=demouser" in unit
+    assert f"ExecStart={paths.venv}/bin/demo dashboard" in unit

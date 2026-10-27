@@ -2,11 +2,11 @@
 
 Run as root, and safe to re-run. It creates the ops group and the daemon
 account, enrols operators, makes the directories, and renders the unit, the
-polkit rule, the sudoers drop-in, the two helper scripts and the login profile
-from the same ``Product`` the rest of the CLI reads, so what ``doctor`` checks
-is what this wrote. Last it gives ``/opt/<name>`` and ``/etc/<name>`` to the
-ops group, all but ``secrets.env``, the GitHub token and the deploy key,
-which stay root-owned.
+polkit rule, the sudoers drop-in, the two helper scripts, the login profile and
+the dashboard's unit from the same ``Product`` the rest of the CLI reads, so
+what ``doctor`` checks is what this wrote. Last it gives ``/opt/<name>`` and
+``/etc/<name>`` to the ops group, all but ``secrets.env``, the GitHub token and
+the deploy key, which stay root-owned.
 
 Creating the virtualenv is not here. It has to happen before this runs, since
 this code lives inside it.
@@ -159,7 +159,7 @@ def _secrets_and_role(product: Product, paths: Paths, role: Optional[str]) -> No
 
 
 def _artefacts(product: Product, paths: Paths) -> None:
-    """Render the unit, the polkit rule, the sudoers drop-in, helpers and profile."""
+    """Render the units, the polkit rule, the sudoers drop-in, helpers and profile."""
     _write(product.unit_template, _render("unit.service", product, paths), 0o644)
     product.polkit_rule.parent.mkdir(parents=True, exist_ok=True)
     product.polkit_rule.parent.chmod(0o750)
@@ -169,6 +169,7 @@ def _artefacts(product: Product, paths: Paths) -> None:
     # can write to
     _write(product.enable_helper, _render("enable-helper.sh", product, paths), 0o755)
     _write(product.profile_script, _render("profile.sh", product, paths), 0o644)
+    _write(product.dashboard_unit, _render("dashboard.service", product, paths), 0o644)
     _sudoers(product, paths)
 
 
@@ -331,6 +332,16 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     if pending:
         print(f"\nDeployed but not set to start at boot: {' '.join(pending)}")
         print(f"  {product.name} enable --now {' '.join(pending)}")
+    # Likewise whether this host serves a page anyone on its network can use
+    unit = product.dashboard_unit.name
+    enabled = units.run(["systemctl", "is-enabled", unit], capture=True).stdout.strip()
+    if enabled != "enabled":
+        print(f"\nThe dashboard is not running; to serve it on "
+              f"{product.dashboard_bind}:{product.dashboard_port}:")
+        print(f"  sudo systemctl enable --now {unit}")
+    else:
+        # It runs this code, which install may just have been run to update
+        subprocess.run(["systemctl", "try-restart", unit], check=False)
     return 0
 
 

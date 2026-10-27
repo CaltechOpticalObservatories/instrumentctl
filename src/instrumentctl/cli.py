@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import commands, hotfix
+from .dashboard import dashboard
 from .doctor import doctor
 from .installer import install
 from .instances import Paths
@@ -35,6 +36,7 @@ def _epilog(product: Product) -> str:
         (f"restart {instance}", f"e.g. after editing {etc}/{instance}.yaml"),
         (f"logs {instance} -f", "follow its log"),
         ("doctor", "why isn't it working?"),
+        ("dashboard", "serve a web page of this host's daemons, with start and stop"),
         ('hotfix "what you fixed"', "save an edit to the code here and send it for review"),
         ("update", "back to the reviewed code, once the hotfix is merged"),
     ]
@@ -56,6 +58,20 @@ def _add_undeploy(add, product: Product) -> None:
     p.add_argument("--force", action="store_true",
                    help="remove deployed configs that differ from the repo")
     p.add_argument("-n", "--dry-run", action="store_true", help="print what would happen")
+
+
+def _add_dashboard(add, product: Product) -> None:
+    p = add("dashboard", dashboard,
+            "serve a web page showing this host's daemons, with start and stop",
+            "Serve a page showing every daemon deployed here, refreshed every two\n"
+            "seconds, with start, stop and restart. There is no login: anyone who can\n"
+            "reach it can stop the daemons, so it listens on loopback unless\n"
+            "[dashboard] bind in instrument.toml says otherwise. Normally run by\n"
+            f"{product.name}-dashboard.service rather than by hand.")
+    p.add_argument("--bind", metavar="ADDRESS",
+                   help=f"address to listen on (default {product.dashboard_bind})")
+    p.add_argument("--port", type=int,
+                   help=f"port to listen on (default {product.dashboard_port})")
 
 
 def _parser(product: Product) -> argparse.ArgumentParser:
@@ -156,9 +172,11 @@ def _parser(product: Product) -> argparse.ArgumentParser:
 
     add("doctor", doctor, "check this host and your account, and say what to fix")
 
+    _add_dashboard(add, product)
+
     p = add("install", install, "set this host up (root)",
             "Create the ops group and the daemon account, enrol operators, make the\n"
-            "directories, and render the unit, polkit rule, sudoers drop-in and helper\n"
+            "directories, and render the units, polkit rule, sudoers drop-in and helper\n"
             "scripts. Safe to re-run. The virtualenv must already exist, since this\n"
             "code lives in it.")
     p.add_argument("operators", nargs="*", metavar="user",
