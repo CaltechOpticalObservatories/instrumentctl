@@ -30,3 +30,9 @@ name = "demo"
 # base = "main"                 # the branch hosts run and hotfixes are reviewed into
 # branch_prefix = "hotfix/"
 # email_domain = ""             # operators commit as <user>@<this>; default: the hostname
+
+# `<name> dashboard`, served by <name>-dashboard.service. It has no login and
+# can stop every daemon, so it listens on loopback unless opened up here
+[dashboard]
+# bind = "127.0.0.1"            # "0.0.0.0" for every interface, on a private network
+# port = 8750

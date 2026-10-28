@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<!-- Rendered by `@name@ dashboard` from instrumentctl's template. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@display_name@ daemons</title>
+<style>
+  /* Status colours are chosen so red and green stay apart for red-green
+     colour blindness (OKLab delta E >= 8 under deutan and protan simulation),
+     and every state also has its own shape and a word, so none relies on
+     colour alone. Dark mode has its own red step: the light one is too dark
+     to read there. */
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb;
+    --card: #ffffff;
+    --group: #f3f2ee;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --muted: #8a8983;
+    --line: #e1e0d9;
+    --ring: rgba(11, 11, 11, 0.10);
+    --button: #f3f2ee;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --warning-edge: #8a6100;
+    --critical: #a31515;
+  }
+  /* The same dark values twice: once for the OS setting, once for the toggle,
+     which wins either way */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface: #1a1a19;
+      --card: #222220;
+      --group: #2a2a28;
+      --text: #f0efec;
+      --text-2: #c3c2b7;
+      --muted: #8f8e86;
+      --line: #33332f;
+      --ring: rgba(255, 255, 255, 0.10);
+      --button: #2c2c2a;
+      --warning-edge: #fab219;
+      --critical: #ff7b72;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #1a1a19;
+    --card: #222220;
+    --group: #2a2a28;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --muted: #8f8e86;
+    --line: #33332f;
+    --ring: rgba(255, 255, 255, 0.10);
+    --button: #2c2c2a;
+    --warning-edge: #fab219;
+    --critical: #ff7b72;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--surface); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px;
+           margin-bottom: 16px; }
+  header #theme { margin-left: auto; }
+  h1 { margin: 0; font-size: 20px; }
+  .meta { color: var(--text-2); font-weight: 400; }
+  .stale { color: var(--critical); font-weight: 600; }
+  .summary { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tile { background: var(--card); border: 1px solid var(--ring); border-radius: 8px;
+          padding: 10px 16px; min-width: 120px; }
+  .tile b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .tile span { color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
+  .notice { display: flex; align-items: center; gap: 8px; background: var(--card);
+            border: 1px solid var(--ring); border-left: 3px solid var(--warning);
+            padding: 8px 12px; margin-bottom: 12px; border-radius: 4px; }
+  .card { background: var(--card); border: 1px solid var(--ring); border-radius: 8px;
+          overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 7px 14px; border-bottom: 1px solid var(--line);
+           white-space: nowrap; vertical-align: middle; }
+  thead th { color: var(--text-2); font-weight: 500; font-size: 12px; }
+  tbody:last-child tr:last-child td { border-bottom: 0; }
+  tr.group th, tr.group td { background: var(--group); font-size: 15px; padding: 8px 14px; }
+  tr.group th .meta { font-size: 13px; margin-left: 10px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+  .state { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; }
+  .detail { color: var(--text-2); font-weight: 400; }
+  .flag { display: inline-flex; align-items: center; gap: 5px; }
+  svg.icon { width: 12px; height: 12px; flex: none; overflow: visible; }
+  .i-good { fill: var(--good); }
+  .i-warning { fill: var(--warning); stroke: var(--warning-edge); stroke-width: 1; }
+  .i-warning-ring { fill: none; stroke: var(--warning-edge); stroke-width: 1; }
+  .i-critical { fill: var(--critical); }
+  .i-cross { stroke: var(--card); stroke-width: 1.6; stroke-linecap: round; }
+  .i-neutral { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+  .i-unknown { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 2 2; }
+  td.actions { width: 1%; }
+  button {
+    font: inherit; font-size: 13px; padding: 3px 10px; margin-left: 4px; min-width: 76px;
+    border: 1px solid var(--ring); border-radius: 6px; background: var(--button);
+    color: var(--text); cursor: pointer; text-align: left;
+  }
+  button:first-child { margin-left: 0; }
+  button:hover:not(:disabled) { border-color: var(--text-2); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  header button { min-width: 0; }
+  #log { position: fixed; right: 24px; bottom: 24px; max-width: 440px; }
+  #log div { display: flex; align-items: center; gap: 8px; background: var(--card);
+             border: 1px solid var(--ring); border-radius: 6px; padding: 8px 12px;
+             margin-top: 8px; box-shadow: 0 2px 8px var(--ring); }
+  code { font-size: 13px; }
+</style>
+<script>
+  // Before the body is drawn, so a dark choice never flashes light first
+  document.documentElement.dataset.theme = localStorage.getItem("theme") || "auto";
+</script>
+</head>
+<body>
+<header>
+  <h1>@display_name@</h1>
+  <span class="meta" id="host"></span>
+  <span class="meta" id="updated">connecting…</span>
+  <button id="theme" title="Follow the system, or always light or dark"></button>
+</header>
+<div class="summary" id="summary"></div>
+<div id="notices"></div>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>State</th><th>Instance</th><th>Since</th><th>Boot</th>
+        <th class="num">Restarts</th><th class="num">PID</th><th class="num">Memory</th>
+        <th>Daemon</th><th>Config</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="empty"><tr><td colspan="10" class="meta">Loading…</td></tr></tbody>
+  </table>
+</div>
+<div id="log" aria-live="polite"></div>
+
+<script>
+"use strict";
+const PROG = "@name@";
+const POLL_MS = 2000;
+const COLUMNS = 10;
+const SVG = "http://www.w3.org/2000/svg";
+let busy = false;
+let lastOk = 0;
+
+// systemd's ActiveState -> a shape and a word. Each shape differs in outline
+// as well as colour: a disc, a half disc, a triangle, a crossed square, a ring.
+function stateOf(i) {
+  if (i.active === "active") return ["good", "active"];
+  if (i.active === "failed") return ["critical", "failed"];
+  if (i.active === "activating" && i.sub === "auto-restart") return ["restarting", "restarting"];
+  if (i.active === "activating" || i.active === "deactivating" || i.active === "reloading")
+    return ["warning", i.active];
+  if (i.active === "inactive") return ["neutral", "inactive"];
+  return ["unknown", i.active || "unknown"];
+}
+
+function shape(tag, attrs) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+  return node;
+}
+
+function icon(kind) {
+  const svg = shape("svg", {class: "icon", viewBox: "0 0 12 12", "aria-hidden": "true"});
+  const parts = {
+    good: [["circle", {cx: 6, cy: 6, r: 5.5, class: "i-good"}]],
+    warning: [["circle", {cx: 6, cy: 6, r: 5, class: "i-warning-ring"}],
+              ["path", {d: "M6 1 A5 5 0 0 0 6 11 Z", class: "i-warning"}]],
+    restarting: [["path", {d: "M6 0.8 L11.4 11 L0.6 11 Z", class: "i-warning"}]],
+    critical: [["rect", {x: 0.5, y: 0.5, width: 11, height: 11, rx: 1.5, class: "i-critical"}],
+               ["path", {d: "M3.5 3.5 L8.5 8.5 M8.5 3.5 L3.5 8.5", class: "i-cross"}]],
+    neutral: [["circle", {cx: 6, cy: 6, r: 4.75, class: "i-neutral"}]],
+    unknown: [["rect", {x: 1, y: 1, width: 10, height: 10, class: "i-unknown"}]],
+  }[kind];
+  for (const [tag, attrs] of parts) svg.append(shape(tag, attrs));
+  return svg;
+}
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value === null || value === undefined) continue;
+    if (key === "class") node.className = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value);
+  }
+  for (const child of children) {
+    if (child === null || child === undefined || child === false || child === "") continue;
+    node.append(child instanceof Node ? child : String(child));
+  }
+  return node;
+}
+
+function bytes(n) {
+  if (n === null || n === undefined) return "";
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
+}
+
+function isRunning(i) { return ["active", "activating", "reloading"].includes(i.active); }
+
+// The same three buttons, the same width, on an instance's row and on its
+// subsystem's, so they line up down the column
+function buttons(targets, running, active, label) {
+  const name = targets.join(" ");
+  const make = (verb, text, enabled) => el("button", {
+    disabled: enabled && !busy ? null : "", title: `${PROG} ${verb} ${name}`,
+    onclick: () => run(verb, targets, label)}, text);
+  return el("td", {class: "actions"},
+    make("start", "▶ Start", !active), make("stop", "■ Stop", running),
+    make("restart", "↻ Restart", true));
+}
+
+function row(i) {
+  const [kind, label] = stateOf(i);
+  let why = "";
+  if (i.active === "failed" && i.result) {
+    why = i.result === "exit-code" && i.exit_status !== null ? `exit ${i.exit_status}` : i.result;
+  }
+  const config = {
+    differs: el("span", {class: "flag", title: "differs from the repo's copy"}, "✎ edited here"),
+    missing: el("span", {class: "flag"}, icon("critical"), "missing"),
+  }[i.config] || el("span", {class: "muted"}, "as in repo");
+  const restarts = i.restarts
+    ? el("span", {class: "flag", title: "automatic restarts since it was last started"},
+         icon("restarting"), i.restarts)
+    : el("span", {class: "muted"}, "0");
+  return el("tr", {},
+    el("td", {}, el("span", {class: "state"}, icon(kind), label,
+                    why && el("span", {class: "detail"}, `(${why})`))),
+    el("td", {}, el("code", {}, i.name)),
+    el("td", {class: "muted tabular"}, i.since),
+    el("td", {}, i.boot === "enabled" ? "yes" : el("span", {class: "muted"}, i.boot || "—")),
+    el("td", {class: "num"}, restarts),
+    el("td", {class: "num muted"}, i.pid || ""),
+    el("td", {class: "num muted"}, bytes(i.memory)),
+    el("td", {class: "muted"}, i.daemon),
+    el("td", {}, config),
+    buttons([i.name], isRunning(i), i.active === "active", i.name));
+}
+
+function group(subsystem, members) {
+  const active = members.filter(i => i.active === "active").length;
+  const head = el("tr", {class: "group"},
+    el("th", {colspan: COLUMNS - 1}, subsystem,
+       el("span", {class: "meta"}, `${active} of ${members.length} active`)),
+    buttons([subsystem], members.some(isRunning), active === members.length,
+            `all of ${subsystem}`));
+  return el("tbody", {}, head, ...members.map(row));
+}
+
+function tile(count, label, kind) {
+  return el("div", {class: "tile"}, el("b", {}, count),
+            el("span", {}, kind && icon(kind), label));
+}
+
+function notices(data) {
+  const out = [];
+  const co = data.checkout || {};
+  if (co.problem) out.push(co.problem);
+  if (co.hotfix) out.push(`Running hotfix branch ${co.branch}; once it is merged: ${PROG} update`);
+  else if (co.branch && co.branch !== co.base) out.push(`The checkout is on ${co.branch}, not ${co.base}`);
+  if (co.edited) out.push(`${co.edited} unsaved edit(s) in the checkout; see: ${PROG} hotfix`);
+  if (co.unsent) out.push(`${co.unsent} commit(s) not sent to GitHub: ${PROG} hotfix --push`);
+  if (data.undeployed.length)
+    out.push(`Defined for this host but not deployed: ${data.undeployed.join(", ")} (${PROG} deploy --new)`);
+  return out.map(text => el("div", {class: "notice"}, icon("restarting"), text));
+}
+
+function render(data) {
+  const all = data.instances;
+  document.getElementById("host").textContent = `host ${data.host}`;
+  const counts = {active: 0, failed: 0, other: 0};
+  for (const i of all) {
+    if (i.active === "active") counts.active++;
+    else if (i.active === "failed") counts.failed++;
+    else counts.other++;
+  }
+  document.getElementById("summary").replaceChildren(
+    tile(all.length, "deployed"), tile(counts.active, "active", "good"),
+    tile(counts.failed, "failed", "critical"), tile(counts.other, "stopped or changing", "neutral"));
+  document.getElementById("notices").replaceChildren(...notices(data));
+
+  const bySubsystem = new Map();
+  for (const i of all) {
+    if (!bySubsystem.has(i.subsystem)) bySubsystem.set(i.subsystem, []);
+    bySubsystem.get(i.subsystem).push(i);
+  }
+  const bodies = [...bySubsystem].map(([s, members]) => group(s, members));
+  if (!bodies.length)
+    bodies.push(el("tbody", {}, el("tr", {}, el("td", {colspan: COLUMNS, class: "meta"},
+      `No instances deployed on this host. ${PROG} deploy <instance>`))));
+  const table = document.querySelector("table");
+  for (const old of table.querySelectorAll("tbody")) old.remove();
+  table.append(...bodies);
+}
+
+function say(text, ok) {
+  const note = el("div", {}, icon(ok ? "good" : "critical"), text);
+  document.getElementById("log").append(note);
+  setTimeout(() => note.remove(), ok ? 6000 : 20000);
+}
+
+async function run(verb, targets, label) {
+  if (verb !== "start" && !confirm(`${verb[0].toUpperCase() + verb.slice(1)} ${label}?`)) return;
+  busy = true;
+  await refresh();
+  try {
+    const response = await fetch(`api/${verb}`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({targets}),
+    });
+    const body = await response.json();
+    if (body.error) say(body.error, false);
+    for (const r of body.results || []) say(`${r.name}: ${r.detail}`, r.ok);
+  } catch (error) {
+    say(`${verb} ${label}: ${error}`, false);
+  }
+  busy = false;
+  await refresh();
+}
+
+async function refresh() {
+  try {
+    const response = await fetch("api/status", {cache: "no-store"});
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    render(await response.json());
+    lastOk = Date.now();
+  } catch (error) {
+    // Keep the last picture, but say plainly that it is old
+  }
+  const updated = document.getElementById("updated");
+  const age = Math.round((Date.now() - lastOk) / 1000);
+  if (!lastOk) { updated.textContent = "cannot reach the dashboard service"; updated.className = "stale"; }
+  else if (age > 3 * POLL_MS / 1000) { updated.textContent = `no update for ${age}s`; updated.className = "stale"; }
+  else { updated.textContent = `updated ${new Date(lastOk).toLocaleTimeString()}`; updated.className = "meta"; }
+}
+
+const THEMES = {auto: "◐ Auto", light: "☀ Light", dark: "☾ Dark"};
+function showTheme() {
+  document.getElementById("theme").textContent = THEMES[document.documentElement.dataset.theme];
+}
+document.getElementById("theme").addEventListener("click", () => {
+  const order = Object.keys(THEMES);
+  const next = order[(order.indexOf(document.documentElement.dataset.theme) + 1) % order.length];
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("theme", next);
+  showTheme();
+});
+showTheme();
+
+refresh();
+setInterval(refresh, POLL_MS);
+</script>
+</body>
+</html>

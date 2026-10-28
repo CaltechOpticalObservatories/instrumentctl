@@ -1,0 +1,40 @@
+# Rendered by `@name@ install`. Edits here are lost on the next run; change the
+# template in instrumentctl instead.
+#
+# Serves the @display_name@ dashboard: what runs on this host, with start, stop
+# and restart. Where it listens is [dashboard] in instrument.toml.
+
+[Unit]
+Description=@display_name@ dashboard
+Documentation=@docs_url@
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The daemon account is in @ops_group@, which the polkit rule lets start and
+# stop @name@@ units and nothing else
+User=@user@
+Group=@user@
+ExecStart=@venv@/bin/@name@ dashboard
+Environment=PYTHONUNBUFFERED=1
+# Reading the checkout's git state must not try to write its index, which the
+# sandboxing below makes read-only
+Environment=GIT_OPTIONAL_LOCKS=0
+
+Restart=on-failure
+RestartSec=5
+
+# Every start, stop and restart is logged with the address it came from:
+#   journalctl -u @name@-dashboard
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=@name@-dashboard
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

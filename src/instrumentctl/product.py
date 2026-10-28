@@ -58,6 +58,10 @@ class Product:  # pylint: disable=too-many-instance-attributes
     git_base: str = "main"
     git_branch_prefix: str = "hotfix/"
     git_email_domain: str = ""
+    # Where the dashboard listens. Loopback unless the instrument opens it up,
+    # since anyone who can reach it can start and stop the daemons
+    dashboard_bind: str = "127.0.0.1"
+    dashboard_port: int = 8750
 
     @classmethod
     def load(cls, config: "ConfigSource") -> "Product":
@@ -73,6 +77,7 @@ class Product:  # pylint: disable=too-many-instance-attributes
         help_text = data.get("help", {})
         paths = data.get("paths", {})
         git = data.get("git", {})
+        dashboard = data.get("dashboard", {})
         return cls(
             name=instrument["name"],
             display_name=instrument.get("display_name",
@@ -94,6 +99,8 @@ class Product:  # pylint: disable=too-many-instance-attributes
             git_base=git.get("base", "main"),
             git_branch_prefix=git.get("branch_prefix", "hotfix/"),
             git_email_domain=git.get("email_domain", ""),
+            dashboard_bind=dashboard.get("bind", "127.0.0.1"),
+            dashboard_port=int(dashboard.get("port", 8750)),
         )
 
     def unit(self, instance: str) -> str:
@@ -115,6 +122,11 @@ class Product:  # pylint: disable=too-many-instance-attributes
     def unit_template(self) -> Path:
         """The installed template unit every instance runs from."""
         return SYSTEMD_DIR / f"{self.name}@.service"
+
+    @property
+    def dashboard_unit(self) -> Path:
+        """The service that serves the dashboard."""
+        return SYSTEMD_DIR / f"{self.name}-dashboard.service"
 
     @property
     def polkit_rule(self) -> Path:

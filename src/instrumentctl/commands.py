@@ -255,11 +255,9 @@ def _act(product: Product, names: List[str], verb: str, dry_run: bool) -> int:
     state = units.states(product, names)
     failed = []
     for name in names:
-        if verb == "start" and state[name].active == "active":
-            print(f"{name:<24} already running")
-            continue
-        if verb == "stop" and not state[name].running:
-            print(f"{name:<24} not running")
+        skip = units.needless(state[name], verb)
+        if skip:
+            print(f"{name:<24} {skip}")
             continue
         if dry_run:
             print(f"{name:<24} would {verb}")

@@ -13,7 +13,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest"]
+dashboard = ["flask>=3.0", "waitress>=3.0"]
+test = ["pytest", "flask>=3.0", "waitress>=3.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
