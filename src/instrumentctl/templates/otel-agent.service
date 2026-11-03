@@ -18,7 +18,7 @@ Group=@user@
 # Reading other units' journal needs this group
 SupplementaryGroups=systemd-journal
 EnvironmentFile=@etc@/otel.env
-ExecStart=/usr/bin/otelcol-contrib --config=@etc@/otel-agent.yaml
+ExecStart=@telemetry_bin@/otelcol-contrib --config=@etc@/otel-agent.yaml
 
 Restart=on-failure
 RestartSec=5

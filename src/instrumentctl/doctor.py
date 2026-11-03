@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 from . import hotfix
 from . import instances as inst
+from . import telemetry
 from . import units
 from .installer import _render, operator_trees
 from .instances import Paths
@@ -23,7 +24,6 @@ from .output import paint
 
 
 OTEL_ENDPOINT = "OTEL_EXPORTER_OTLP_ENDPOINT"
-OTEL_COLLECTOR = Path("/usr/bin/otelcol-contrib")
 OTEL_SDK = "opentelemetry-sdk"
 OTLP_HTTP_PORT = 4318
 BACKEND_PROBE_TIMEOUT_S = 2.0
@@ -391,28 +391,50 @@ def _telemetry(r: Report, paths: Paths) -> None:
         r.bad(f"{paths.otel_env} does not set {OTEL_ENDPOINT}")
         r.hint(f"add {OTEL_ENDPOINT}=http://<backend>:{OTLP_HTTP_PORT} to {paths.otel_env}")
         return
-    _telemetry_backend(r, endpoint)
+    _backend_reachable(r, endpoint)
     try:
         metadata.version(OTEL_SDK)
         r.ok(f"{OTEL_SDK} installed, so the daemons export")
     except metadata.PackageNotFoundError:
         r.bad(f"{OTEL_SDK} is not in {paths.venv}, so the daemons export nothing")
         r.hint(f"depend on libby[otel] in {paths.product.name}, then reinstall the venv")
-    if not OTEL_COLLECTOR.exists():
-        r.bad(f"{OTEL_COLLECTOR} not found, so no logs or host metrics are shipped")
-        r.hint("admin: install the otelcol-contrib package from the "
-               "opentelemetry-collector-releases GitHub releases")
+    collector = paths.telemetry_bin / telemetry.AGENT_BINARY
+    if not collector.exists():
+        r.bad(f"{collector} not found, so no logs or host metrics are shipped")
+        r.hint(f"{_install_hint(paths)}   # fetches it now that otel.env exists")
         return
-    unit = paths.product.otel_agent_unit.name
+    _unit_running(r, paths.product.otel_agent_unit.name,
+                  "so no logs or host metrics are shipped")
+
+
+def _telemetry_backend(r: Report, paths: Paths) -> None:
+    """On the backend host, whether each of its binaries and services is in place."""
+    if not telemetry.is_backend_host(paths):
+        return
+    r.section("Telemetry backend")
+    try:
+        module = telemetry.backend()
+    except RuntimeError as ex:
+        r.bad(str(ex))
+        return
+    for release in module.RELEASES:
+        if not (paths.telemetry_bin / release.binary).exists():
+            r.bad(f"{paths.telemetry_bin / release.binary} not found")
+            r.hint(_install_hint(paths))
+    for service in module.SERVICES:
+        _unit_running(r, paths.product.telemetry_unit(service).name, "")
+
+
+def _unit_running(r: Report, unit: str, consequence: str) -> None:
     active = units.run(["systemctl", "is-active", unit], capture=True).stdout.strip()
     if active == "active":
         r.ok(f"{unit} is running")
-    else:
-        r.bad(f"{unit} is {active or 'unknown'}, so no logs or host metrics are shipped")
-        r.hint(f"sudo systemctl enable --now {unit}")
+        return
+    r.bad(f"{unit} is {active or 'unknown'}" + (f", {consequence}" if consequence else ""))
+    r.hint(f"sudo systemctl enable --now {unit}")
 
 
-def _telemetry_backend(r: Report, endpoint: str) -> None:
+def _backend_reachable(r: Report, endpoint: str) -> None:
     url = urlsplit(endpoint)
     if not url.hostname:
         r.bad(f"{OTEL_ENDPOINT}={endpoint} names no host")
@@ -496,6 +518,7 @@ def doctor(paths: Paths, _args: argparse.Namespace) -> int:
     _placement(r, paths)
     _secrets(r, paths)
     _telemetry(r, paths)
+    _telemetry_backend(r, paths)
     _hotfixes(r, paths)
     print()
     if r.problems == 0:

@@ -106,4 +106,5 @@ def test_the_agent_runs_only_once_a_backend_is_named(product: Product,
     assert f"ConditionPathExists={paths.otel_env}" in unit
     assert f"EnvironmentFile={paths.otel_env}" in unit
     assert f"--config={paths.otel_agent_config}" in unit
+    assert f"ExecStart={paths.telemetry_bin}/otelcol-contrib" in unit
     assert "User=demouser" in unit

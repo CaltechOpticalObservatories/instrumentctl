@@ -95,6 +95,21 @@ class Paths:
         return self.etc / "otel.env"
 
     @property
+    def telemetry_bin(self) -> Path:
+        """The pinned telemetry binaries: the agent's Collector, and the backend's."""
+        return self.opt / "telemetry" / "bin"
+
+    @property
+    def telemetry_etc(self) -> Path:
+        """The telemetry backend's rendered configs."""
+        return self.etc / "telemetry"
+
+    @property
+    def telemetry_data(self) -> Path:
+        """Where Prometheus, Tempo and Loki keep their data."""
+        return Path("/var/lib") / self.product.name / "telemetry"
+
+    @property
     def otel_agent_config(self) -> Path:
         """The telemetry agent's Collector config."""
         return self.etc / "otel-agent.yaml"

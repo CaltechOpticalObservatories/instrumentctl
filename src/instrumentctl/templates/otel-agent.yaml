@@ -48,6 +48,11 @@ exporters:
     endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
 
 service:
+  # The backend Collector may run on this host too, and both default to port 8888
+  # for their own metrics, which nothing scrapes here
+  telemetry:
+    metrics:
+      level: none
   pipelines:
     logs/journald:
       receivers: [journald]

@@ -144,9 +144,7 @@ from: `journalctl -u <name>-dashboard`.
 ## Telemetry
 
 Daemons built on libby export OpenTelemetry traces and request metrics when
-`/etc/<name>/otel.env` names a backend, such as a
-[libby-telemetry](https://github.com/CaltechOpticalObservatories/libby-telemetry)
-stack:
+`/etc/<name>/otel.env` names the telemetry backend:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://<backend>:4318
@@ -155,20 +153,39 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://<backend>:4318
 Every instance reads the file, so a restart turns export on. The instrument
 must depend on `libby[otel]`. Without the file nothing is exported.
 
-`install` also renders `/etc/<name>/otel-agent.yaml` and
-`<name>-otel-agent.service`, a Collector that ships the instrument's journal,
-the log files in `paths.logs` and this host's metrics to the same backend. It
-runs the `otelcol-contrib` package (0.164 or newer, from the
-[collector releases](https://github.com/open-telemetry/opentelemetry-collector-releases/releases));
-disable the package's own `otelcol-contrib.service`. Start the agent once
-`otel.env` exists:
+The backend is libby's (`libby.telemetry_backend`): an OpenTelemetry Collector
+fanning out to Prometheus, Tempo and Loki, as plain systemd services. Name the
+host role that runs it, and optionally where it listens and what it keeps:
+
+```toml
+[telemetry]
+backend_host = "<role>"         # the role in /etc/<name>/host
+# otlp_bind = "0.0.0.0"         # where the Collector takes OTLP, from every daemon host
+# query_bind = "127.0.0.1"      # where Prometheus, Tempo and Loki answer Grafana
+# metrics_retention = "5y"
+# trace_retention = "336h"
+```
+
+On that host `install` downloads libby's pinned releases, checks each against
+its SHA-256, and unpacks them into `/opt/<name>/telemetry/bin`. It renders
+their configs into `/etc/<name>/telemetry/` and the units `<name>-otelcol`,
+`<name>-prometheus`, `<name>-tempo` and `<name>-loki`, with data under
+`/var/lib/<name>/telemetry`. No package repositories or containers are
+involved.
+
+On every host with an `otel.env`, `install` fetches the same pinned Collector
+and renders `<name>-otel-agent.service`, which ships the instrument's journal,
+the log files in `paths.logs` and this host's metrics to the backend.
+
+Whether these run is an operator's call; `install` prints the command:
 
 ```bash
+sudo systemctl enable --now <name>-otelcol <name>-prometheus <name>-tempo <name>-loki
 sudo systemctl enable --now <name>-otel-agent
 ```
 
-`<name> doctor` checks the file, the backend, the SDK in the venv, the
-Collector binary and the agent.
+`<name> doctor` checks the file, the backend's reachability, the SDK in the
+venv, the agent, and on the backend host its binaries and services.
 
 ## Tests
 
