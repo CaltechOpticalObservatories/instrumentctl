@@ -1,0 +1,36 @@
+# Rendered by `@name@ install`. Edits here are lost on the next run; change the
+# template in instrumentctl instead.
+#
+# Ships @display_name@ daemon logs and this host's metrics to the telemetry
+# backend. Runs only once @etc@/otel.env names that backend.
+
+[Unit]
+Description=@display_name@ telemetry agent
+Documentation=@docs_url@
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@etc@/otel.env
+
+[Service]
+Type=simple
+User=@user@
+Group=@user@
+# Reading other units' journal needs this group
+SupplementaryGroups=systemd-journal
+EnvironmentFile=@etc@/otel.env
+ExecStart=/usr/bin/otelcol-contrib --config=@etc@/otel-agent.yaml
+
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=@name@-otel-agent
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

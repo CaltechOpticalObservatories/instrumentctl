@@ -24,6 +24,9 @@ EnvironmentFile=@etc@/instances/%i.env
 # the instance files above. systemd reads this as root before dropping to User=
 # below.
 EnvironmentFile=-@etc@/secrets.env
+# Optional: OTEL_EXPORTER_OTLP_ENDPOINT turns on the daemons' OpenTelemetry
+# export; without the file they export nothing
+EnvironmentFile=-@etc@/otel.env
 # Drivers write their own .log next to the working directory, so this has to
 # be writable by User= above; the repo checkout is not
 WorkingDirectory=@logs@

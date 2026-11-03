@@ -2,11 +2,11 @@
 
 Run as root, and safe to re-run. It creates the ops group and the daemon
 account, enrols operators, makes the directories, and renders the unit, the
-polkit rule, the sudoers drop-in, the two helper scripts, the login profile and
-the dashboard's unit from the same ``Product`` the rest of the CLI reads, so
-what ``doctor`` checks is what this wrote. Last it gives ``/opt/<name>`` and
-``/etc/<name>`` to the ops group, all but ``secrets.env``, the GitHub token and
-the deploy key, which stay root-owned.
+polkit rule, the sudoers drop-in, the two helper scripts, the login profile,
+the dashboard's unit and the telemetry agent from the same ``Product`` the rest
+of the CLI reads, so what ``doctor`` checks is what this wrote. Last it gives
+``/opt/<name>`` and ``/etc/<name>`` to the ops group, all but ``secrets.env``,
+the GitHub token and the deploy key, which stay root-owned.
 
 Creating the virtualenv is not here. It has to happen before this runs, since
 this code lives inside it.
@@ -170,6 +170,8 @@ def _artefacts(product: Product, paths: Paths) -> None:
     _write(product.enable_helper, _render("enable-helper.sh", product, paths), 0o755)
     _write(product.profile_script, _render("profile.sh", product, paths), 0o644)
     _write(product.dashboard_unit, _render("dashboard.service", product, paths), 0o644)
+    _write(paths.otel_agent_config, _render("otel-agent.yaml", product, paths), 0o644)
+    _write(product.otel_agent_unit, _render("otel-agent.service", product, paths), 0o644)
     _sudoers(product, paths)
 
 
@@ -342,7 +344,23 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     else:
         # It runs this code, which install may just have been run to update
         subprocess.run(["systemctl", "try-restart", unit], check=False)
+    _report_otel_agent(paths)
     return 0
+
+
+def _report_otel_agent(paths: Paths) -> None:
+    """Say how to start the agent once a backend is named, and restart it if running."""
+    if not paths.otel_env.exists():
+        return
+    unit = paths.product.otel_agent_unit.name
+    enabled = units.run(["systemctl", "is-enabled", unit], capture=True).stdout.strip()
+    if enabled != "enabled":
+        print(f"\n{paths.otel_env} names a telemetry backend; to ship logs and host "
+              f"metrics to it:")
+        print(f"  sudo systemctl enable --now {unit}")
+    else:
+        # Its config may just have been rendered anew
+        subprocess.run(["systemctl", "try-restart", unit], check=False)
 
 
 def _pending_at_boot(paths: Paths) -> List[str]:

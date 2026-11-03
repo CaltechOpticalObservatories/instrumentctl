@@ -141,6 +141,35 @@ listens on loopback unless `[dashboard] bind` says otherwise, and that should
 only be on a private network. Each action is logged with the address it came
 from: `journalctl -u <name>-dashboard`.
 
+## Telemetry
+
+Daemons built on libby export OpenTelemetry traces and request metrics when
+`/etc/<name>/otel.env` names a backend, such as a
+[libby-telemetry](https://github.com/CaltechOpticalObservatories/libby-telemetry)
+stack:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://<backend>:4318
+```
+
+Every instance reads the file, so a restart turns export on. The instrument
+must depend on `libby[otel]`. Without the file nothing is exported.
+
+`install` also renders `/etc/<name>/otel-agent.yaml` and
+`<name>-otel-agent.service`, a Collector that ships the instrument's journal,
+the log files in `paths.logs` and this host's metrics to the same backend. It
+runs the `otelcol-contrib` package (0.164 or newer, from the
+[collector releases](https://github.com/open-telemetry/opentelemetry-collector-releases/releases));
+disable the package's own `otelcol-contrib.service`. Start the agent once
+`otel.env` exists:
+
+```bash
+sudo systemctl enable --now <name>-otel-agent
+```
+
+`<name> doctor` checks the file, the backend, the SDK in the venv, the
+Collector binary and the agent.
+
 ## Tests
 
 ```bash

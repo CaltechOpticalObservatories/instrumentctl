@@ -129,6 +129,11 @@ class Product:  # pylint: disable=too-many-instance-attributes
         return SYSTEMD_DIR / f"{self.name}-dashboard.service"
 
     @property
+    def otel_agent_unit(self) -> Path:
+        """The service that ships logs and host metrics to the telemetry backend."""
+        return SYSTEMD_DIR / f"{self.name}-otel-agent.service"
+
+    @property
     def polkit_rule(self) -> Path:
         """The rule granting the ops group start/stop without a password."""
         return POLKIT_RULES_DIR / f"49-{self.name}.rules"

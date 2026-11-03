@@ -12,6 +12,7 @@ import stat
 from importlib import metadata
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
 
 from . import hotfix
 from . import instances as inst
@@ -19,6 +20,13 @@ from . import units
 from .installer import _render, operator_trees
 from .instances import Paths
 from .output import paint
+
+
+OTEL_ENDPOINT = "OTEL_EXPORTER_OTLP_ENDPOINT"
+OTEL_COLLECTOR = Path("/usr/bin/otelcol-contrib")
+OTEL_SDK = "opentelemetry-sdk"
+OTLP_HTTP_PORT = 4318
+BACKEND_PROBE_TIMEOUT_S = 2.0
 
 
 class Report:
@@ -368,6 +376,55 @@ def _secrets(r: Report, paths: Paths) -> None:
             r.hint(f"add {variable}=<value> to {paths.secrets}, then restart that daemon")
 
 
+def _telemetry(r: Report, paths: Paths) -> None:
+    """Whether telemetry is on, and if so whether every piece of it is in place."""
+    r.section("Telemetry")
+    try:
+        endpoint = inst.read_env(paths.otel_env).get(OTEL_ENDPOINT, "")
+    except FileNotFoundError:
+        r.ok(f"off (no {paths.otel_env})")
+        return
+    except OSError:
+        r.warn(f"cannot read {paths.otel_env}, so telemetry is unchecked")
+        return
+    if not endpoint:
+        r.bad(f"{paths.otel_env} does not set {OTEL_ENDPOINT}")
+        r.hint(f"add {OTEL_ENDPOINT}=http://<backend>:{OTLP_HTTP_PORT} to {paths.otel_env}")
+        return
+    _telemetry_backend(r, endpoint)
+    try:
+        metadata.version(OTEL_SDK)
+        r.ok(f"{OTEL_SDK} installed, so the daemons export")
+    except metadata.PackageNotFoundError:
+        r.bad(f"{OTEL_SDK} is not in {paths.venv}, so the daemons export nothing")
+        r.hint(f"depend on libby[otel] in {paths.product.name}, then reinstall the venv")
+    if not OTEL_COLLECTOR.exists():
+        r.bad(f"{OTEL_COLLECTOR} not found, so no logs or host metrics are shipped")
+        r.hint("admin: install the otelcol-contrib package from the "
+               "opentelemetry-collector-releases GitHub releases")
+        return
+    unit = paths.product.otel_agent_unit.name
+    active = units.run(["systemctl", "is-active", unit], capture=True).stdout.strip()
+    if active == "active":
+        r.ok(f"{unit} is running")
+    else:
+        r.bad(f"{unit} is {active or 'unknown'}, so no logs or host metrics are shipped")
+        r.hint(f"sudo systemctl enable --now {unit}")
+
+
+def _telemetry_backend(r: Report, endpoint: str) -> None:
+    url = urlsplit(endpoint)
+    if not url.hostname:
+        r.bad(f"{OTEL_ENDPOINT}={endpoint} names no host")
+        return
+    port = url.port or OTLP_HTTP_PORT
+    try:
+        with socket.create_connection((url.hostname, port), timeout=BACKEND_PROBE_TIMEOUT_S):
+            r.ok(f"telemetry backend {url.hostname}:{port} is reachable")
+    except OSError as ex:
+        r.bad(f"telemetry backend {url.hostname}:{port} is unreachable: {ex}")
+
+
 def _placement(r: Report, paths: Paths) -> None:
     """Flag instances running on the wrong host, or claiming no host at all.
 
@@ -438,6 +495,7 @@ def doctor(paths: Paths, _args: argparse.Namespace) -> int:
     _deployed(r, paths)
     _placement(r, paths)
     _secrets(r, paths)
+    _telemetry(r, paths)
     _hotfixes(r, paths)
     print()
     if r.problems == 0:

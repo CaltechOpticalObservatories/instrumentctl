@@ -90,6 +90,16 @@ class Paths:
         return self.etc / "secrets.env"
 
     @property
+    def otel_env(self) -> Path:
+        """Names the telemetry backend; its absence means telemetry is off."""
+        return self.etc / "otel.env"
+
+    @property
+    def otel_agent_config(self) -> Path:
+        """The telemetry agent's Collector config."""
+        return self.etc / "otel-agent.yaml"
+
+    @property
     def deploy_key(self) -> Path:
         """The SSH key install.sh fetches private dependencies with."""
         return self.etc / "deploy-key"

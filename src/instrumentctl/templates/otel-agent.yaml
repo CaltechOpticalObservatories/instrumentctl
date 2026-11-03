@@ -1,0 +1,63 @@
+# Rendered by `@name@ install`. Edits here are lost on the next run; change the
+# template in instrumentctl instead.
+#
+# OpenTelemetry Collector for this host: @display_name@ daemon logs from the
+# journal and @logs@, plus host metrics, shipped to the backend named by
+# OTEL_EXPORTER_OTLP_ENDPOINT in @etc@/otel.env. The daemons send their traces
+# and metrics to that backend themselves.
+
+receivers:
+  journald:
+    units: ["@name@@*", "@name@-dashboard"]
+    priority: info
+  file_log:
+    include: ["@logs@/*.log"]
+    # A line that does not start with a date continues the record above it,
+    # which keeps a traceback in one record
+    multiline:
+      line_start_pattern: '^\d{4}-\d{2}-\d{2}'
+  host_metrics:
+    collection_interval: 30s
+    scrapers:
+      cpu: {}
+      load: {}
+      memory: {}
+      disk: {}
+      filesystem: {}
+      network: {}
+
+processors:
+  resource_detection:
+    detectors: [system]
+  resource:
+    attributes:
+      - key: service.name
+        value: "@name@"
+        action: upsert
+  # Keep the journal's message as the log line, so a trace_id in it can be matched
+  transform/journald:
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["systemd.unit"], body["_SYSTEMD_UNIT"])
+          - set(body, body["MESSAGE"])
+  batch: {}
+
+exporters:
+  otlp_http:
+    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+
+service:
+  pipelines:
+    logs/journald:
+      receivers: [journald]
+      processors: [resource_detection, resource, transform/journald, batch]
+      exporters: [otlp_http]
+    logs/files:
+      receivers: [file_log]
+      processors: [resource_detection, resource, batch]
+      exporters: [otlp_http]
+    metrics:
+      receivers: [host_metrics]
+      processors: [resource_detection, resource, batch]
+      exporters: [otlp_http]
