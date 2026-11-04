@@ -36,3 +36,11 @@ name = "demo"
 [dashboard]
 # bind = "127.0.0.1"            # "0.0.0.0" for every interface, on a private network
 # port = 8750
+
+# The telemetry backend libby exports to. Without backend_host, no host runs it
+[telemetry]
+# backend_host = ""             # the host role (/etc/<name>/host) that runs it
+# otlp_bind = "0.0.0.0"         # where its Collector takes OTLP
+# query_bind = "127.0.0.1"      # where Prometheus, Tempo and Loki answer Grafana
+# metrics_retention = "5y"
+# trace_retention = "336h"

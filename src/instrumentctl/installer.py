@@ -2,11 +2,11 @@
 
 Run as root, and safe to re-run. It creates the ops group and the daemon
 account, enrols operators, makes the directories, and renders the unit, the
-polkit rule, the sudoers drop-in, the two helper scripts, the login profile and
-the dashboard's unit from the same ``Product`` the rest of the CLI reads, so
-what ``doctor`` checks is what this wrote. Last it gives ``/opt/<name>`` and
-``/etc/<name>`` to the ops group, all but ``secrets.env``, the GitHub token and
-the deploy key, which stay root-owned.
+polkit rule, the sudoers drop-in, the two helper scripts, the login profile,
+the dashboard's unit and the telemetry agent from the same ``Product`` the rest
+of the CLI reads, so what ``doctor`` checks is what this wrote. Last it gives
+``/opt/<name>`` and ``/etc/<name>`` to the ops group, all but ``secrets.env``,
+the GitHub token and the deploy key, which stay root-owned.
 
 Creating the virtualenv is not here. It has to happen before this runs, since
 this code lives inside it.
@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence
 
 from . import instances as inst
+from . import telemetry
 from . import units
 from .instances import Paths
 from .output import paint
@@ -38,6 +39,7 @@ JOURNAL_GROUP = "systemd-journal"
 # the creating user's own
 CONFIG_MODE = 0o2775
 LOG_MODE = 0o2750
+DATA_MODE = 0o750
 SECRETS_MODE = 0o660
 TOKEN_MODE = 0o640
 DEPLOY_KEY_MODE = 0o600
@@ -64,6 +66,7 @@ def _render(template: str, product: Product, paths: Paths) -> str:
         "venv": str(paths.venv),
         "repo": str(paths.repo),
         "logs": str(paths.logs),
+        "telemetry_bin": str(paths.telemetry_bin),
     }
     text = resources.files(__package__).joinpath("templates", template).read_text(
         encoding="utf-8")
@@ -170,7 +173,34 @@ def _artefacts(product: Product, paths: Paths) -> None:
     _write(product.enable_helper, _render("enable-helper.sh", product, paths), 0o755)
     _write(product.profile_script, _render("profile.sh", product, paths), 0o644)
     _write(product.dashboard_unit, _render("dashboard.service", product, paths), 0o644)
+    _write(paths.otel_agent_config, _render("otel-agent.yaml", product, paths), 0o644)
+    _write(product.otel_agent_unit, _render("otel-agent.service", product, paths), 0o644)
     _sudoers(product, paths)
+
+
+def _telemetry(product: Product, paths: Paths) -> None:
+    """Fetch the telemetry binaries this host needs; on the backend host, its services too."""
+    if not telemetry.wanted(paths):
+        return
+    backend = telemetry.backend()
+    for release in telemetry.releases(paths, backend):
+        changed = telemetry.fetch(release, paths.telemetry_bin)
+        _say("fetched" if changed else "unchanged",
+             f"{paths.telemetry_bin / release.binary} {release.version}")
+    if not telemetry.is_backend_host(paths):
+        return
+    values = telemetry.values(paths)
+    for service in backend.SERVICES:
+        _write(paths.telemetry_etc / f"{service}.yaml",
+               backend.render(f"{service}.yaml", values), 0o644)
+        _write(product.telemetry_unit(service),
+               backend.render(f"{service}.service", values), 0o644)
+    for service in telemetry.DATA_SERVICES:
+        directory = paths.telemetry_data / service
+        directory.mkdir(parents=True, exist_ok=True)
+        shutil.chown(directory, product.user, product.user)
+        directory.chmod(DATA_MODE)
+    _say("ready", str(paths.telemetry_data))
 
 
 def _sudoers(product: Product, paths: Paths) -> None:
@@ -318,6 +348,7 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     _github_token(product, paths)
     _deploy_key(paths)
     _artefacts(product, paths)
+    _telemetry(product, paths)
     # Before the hand-over, which gives back the config git rewrites as root
     _git_shared_repository(paths.repo)
 
@@ -347,7 +378,35 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
     else:
         # It runs this code, which install may just have been run to update
         subprocess.run(["systemctl", "try-restart", unit], check=False)
+    _report_telemetry(paths)
     return 0
+
+
+def _report_telemetry(paths: Paths) -> None:
+    """Say how to start the telemetry units, and restart those already running."""
+    product = paths.product
+    if telemetry.is_backend_host(paths):
+        backend = telemetry.backend()
+        _enable_or_restart([product.telemetry_unit(s).name for s in backend.SERVICES],
+                           "This host is the telemetry backend; to start it:")
+    if paths.otel_env.exists():
+        _enable_or_restart([product.otel_agent_unit.name],
+                           f"{paths.otel_env} names a telemetry backend; to ship logs "
+                           "and host metrics to it:")
+
+
+def _enable_or_restart(names: List[str], why: str) -> None:
+    # Whether a service runs is an operator's call, but one that does should pick
+    # up what was just rendered
+    pending = [name for name in names
+               if units.run(["systemctl", "is-enabled", name], capture=True).stdout.strip()
+               != "enabled"]
+    if pending:
+        print(f"\n{why}")
+        print(f"  sudo systemctl enable --now {' '.join(pending)}")
+    running = [name for name in names if name not in pending]
+    if running:
+        subprocess.run(["systemctl", "try-restart", *running], check=False)
 
 
 def _pending_at_boot(paths: Paths) -> List[str]:

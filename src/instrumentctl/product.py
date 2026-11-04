@@ -63,6 +63,14 @@ class Product:  # pylint: disable=too-many-instance-attributes
     # since anyone who can reach it can start and stop the daemons
     dashboard_bind: str = "127.0.0.1"
     dashboard_port: int = 8750
+    # The host role that runs the telemetry backend, where its Collector takes
+    # OTLP and where Prometheus, Tempo and Loki answer Grafana, and how long
+    # metrics and traces are kept. No role means no backend on any host
+    telemetry_backend_host: Optional[str] = field(default=None)
+    telemetry_otlp_bind: str = "0.0.0.0"
+    telemetry_query_bind: str = "127.0.0.1"
+    telemetry_metrics_retention: str = "5y"
+    telemetry_trace_retention: str = "336h"
 
     @classmethod
     def load(cls, config: "ConfigSource") -> "Product":
@@ -79,6 +87,7 @@ class Product:  # pylint: disable=too-many-instance-attributes
         paths = data.get("paths", {})
         git = data.get("git", {})
         dashboard = data.get("dashboard", {})
+        telemetry = data.get("telemetry", {})
         return cls(
             name=instrument["name"],
             display_name=instrument.get("display_name",
@@ -103,6 +112,11 @@ class Product:  # pylint: disable=too-many-instance-attributes
             git_email_domain=git.get("email_domain", ""),
             dashboard_bind=dashboard.get("bind", "127.0.0.1"),
             dashboard_port=int(dashboard.get("port", 8750)),
+            telemetry_backend_host=telemetry.get("backend_host"),
+            telemetry_otlp_bind=telemetry.get("otlp_bind", "0.0.0.0"),
+            telemetry_query_bind=telemetry.get("query_bind", "127.0.0.1"),
+            telemetry_metrics_retention=telemetry.get("metrics_retention", "5y"),
+            telemetry_trace_retention=telemetry.get("trace_retention", "336h"),
         )
 
     def unit(self, instance: str) -> str:
@@ -129,6 +143,15 @@ class Product:  # pylint: disable=too-many-instance-attributes
     def dashboard_unit(self) -> Path:
         """The service that serves the dashboard."""
         return SYSTEMD_DIR / f"{self.name}-dashboard.service"
+
+    def telemetry_unit(self, service: str) -> Path:
+        """A telemetry backend service, e.g. ``<name>-prometheus.service``."""
+        return SYSTEMD_DIR / f"{self.name}-{service}.service"
+
+    @property
+    def otel_agent_unit(self) -> Path:
+        """The service that ships logs and host metrics to the telemetry backend."""
+        return SYSTEMD_DIR / f"{self.name}-otel-agent.service"
 
     @property
     def polkit_rule(self) -> Path:

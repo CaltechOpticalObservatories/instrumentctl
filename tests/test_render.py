@@ -12,7 +12,8 @@ from instrumentctl.product import Product
 
 TEMPLATES = ("unit.service", "polkit.rules", "sudoers",
              "front-door.sh", "enable-helper.sh", "profile.sh",
-             "dashboard.service", "dashboard.html")
+             "dashboard.service", "dashboard.html", "otel-agent.service",
+             "otel-agent.yaml")
 
 PLACEHOLDER = re.compile(r"@[a-z_]+@")
 
@@ -84,3 +85,26 @@ def test_the_dashboard_runs_as_the_account_polkit_trusts(product: Product,
     unit = _render("dashboard.service", product, paths)
     assert "User=demouser" in unit
     assert f"ExecStart={paths.venv}/bin/demo dashboard" in unit
+
+
+def test_the_unit_reads_the_optional_telemetry_file(product: Product, paths: Paths) -> None:
+    """Optional, so a host without a telemetry backend still starts its daemons."""
+    assert f"EnvironmentFile=-{paths.otel_env}" in _render("unit.service", product, paths)
+
+
+def test_the_agent_collects_only_this_instruments_logs(product: Product,
+                                                      paths: Paths) -> None:
+    config = _render("otel-agent.yaml", product, paths)
+    assert 'units: ["demo@*", "demo-dashboard"]' in config
+    assert f'include: ["{paths.logs}/*.log"]' in config
+    assert "${env:OTEL_EXPORTER_OTLP_ENDPOINT}" in config
+
+
+def test_the_agent_runs_only_once_a_backend_is_named(product: Product,
+                                                     paths: Paths) -> None:
+    unit = _render("otel-agent.service", product, paths)
+    assert f"ConditionPathExists={paths.otel_env}" in unit
+    assert f"EnvironmentFile={paths.otel_env}" in unit
+    assert f"--config={paths.otel_agent_config}" in unit
+    assert f"ExecStart={paths.telemetry_bin}/otelcol-contrib" in unit
+    assert "User=demouser" in unit
