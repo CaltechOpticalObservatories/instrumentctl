@@ -191,9 +191,10 @@ def _sudoers(product: Product, paths: Paths) -> None:
 
 
 def operator_trees(paths: Paths) -> List[Path]:
-    """/opt/<name> and /etc/<name>, plus a venv or checkout moved outside them."""
+    """/opt/<name> and /etc/<name>, plus a venv, checkout or extra dir moved outside them."""
     roots = [paths.opt, paths.etc]
-    moved = [tree for tree in (paths.venv, paths.repo)
+    extra = [paths.extra] if paths.extra.is_dir() else []
+    moved = [tree for tree in (paths.venv, paths.repo, *extra)
              if not any(tree.is_relative_to(root) for root in roots)]
     return roots + moved
 
@@ -221,19 +222,23 @@ def _hand_to_operators(tree: Path, product: Product,
     subprocess.run(["setfacl", "-R", "-P", "-m", DEFAULT_ACL, str(tree)], check=True)
 
 
-def _git_safe_directory(repo: Path) -> None:
-    """Let operators run git here despite the tree belonging to the daemon.
+def _git_safe_directory(paths: Paths) -> None:
+    """Let operators run git here despite the trees belonging to the daemon.
 
     Since 2.35.2 git refuses a repository whose owner is not the caller, which
-    group permissions do not satisfy. Each submodule is a repository of its own
-    and needs the same.
+    group permissions do not satisfy. Each submodule and each extra clone is a
+    repository of its own and needs the same.
     """
-    if not (repo / ".git").exists():
+    repo = paths.repo
+    trees = [*inst.extra_checkouts(paths)]
+    if (repo / ".git").exists():
+        trees = [repo, *_submodules(repo), *trees]
+    if not trees:
         return
     listed = subprocess.run(["git", "config", "--system", "--get-all",
                              "safe.directory"], check=False, capture_output=True,
                             text=True).stdout.split()
-    for tree in (repo, *_submodules(repo)):
+    for tree in trees:
         if str(tree) in listed:
             continue
         subprocess.run(["git", "config", "--system", "--add", "safe.directory",
@@ -320,7 +325,7 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
         _hand_to_operators(tree, product,
                            keep=(paths.secrets, paths.github_token, paths.deploy_key))
         _say("owned", f"{tree} by {product.user}:{product.ops_group}")
-    _git_safe_directory(paths.repo)
+    _git_safe_directory(paths)
     subprocess.run(["systemctl", "daemon-reload"], check=False)
 
     print(f"\nHost setup complete. Operators in {product.ops_group} can now "

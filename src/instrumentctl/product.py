@@ -52,6 +52,7 @@ class Product:  # pylint: disable=too-many-instance-attributes
     venv_dir: Optional[str] = field(default=None)
     repo_dir: Optional[str] = field(default=None)
     logs_dir: Optional[str] = field(default=None)
+    extra_dir: Optional[str] = field(default=None)
     # Where hotfixes go: the remote and branch the host follows, the prefix
     # that marks a hotfix branch, and the domain of the operator's commit email
     git_remote: str = "origin"
@@ -95,6 +96,7 @@ class Product:  # pylint: disable=too-many-instance-attributes
             venv_dir=paths.get("venv"),
             repo_dir=paths.get("repo"),
             logs_dir=paths.get("logs"),
+            extra_dir=paths.get("extra"),
             git_remote=git.get("remote", "origin"),
             git_base=git.get("base", "main"),
             git_branch_prefix=git.get("branch_prefix", "hotfix/"),

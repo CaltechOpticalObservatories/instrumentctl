@@ -53,11 +53,12 @@ common keys with their defaults, ready to copy.
 | `display_name` | `name` | the instrument's proper name, as it reads in `systemctl status` |
 | `user` | `name` | the account the daemons run as |
 | `ops_group` | `<name>-ops` | the group that may start, stop and deploy without a password |
-| `env_prefix` | `NAME` | instance files set `<PREFIX>_DAEMON` and `_HOST`; a host overrides a path with `<PREFIX>_ETC_DIR`, `_VENV_DIR`, `_REPO_DIR` or `_LOGS_DIR` |
+| `env_prefix` | `NAME` | instance files set `<PREFIX>_DAEMON` and `_HOST`; a host overrides a path with `<PREFIX>_ETC_DIR`, `_VENV_DIR`, `_REPO_DIR`, `_LOGS_DIR` or `_EXTRA_DIR` |
 | `paths.etc` | `/etc/<name>` | configs, instance files and `secrets.env` |
 | `paths.venv` | `/opt/<name>/venv` | the interpreter the daemons run under |
 | `paths.repo` | `/opt/<name>/app` | the checkout holding `daemons/` and `config/` |
 | `paths.logs` | `/var/log/<name>` | the daemons' own log files |
+| `paths.extra` | `/opt/<name>/extra` | host-local clones the installer builds an extra from instead of GitHub |
 | `docs_url` | none | linked from `--help` |
 | `secrets.key_suffix` | `_env` | a config key ending in this names the variable holding a credential |
 | `help.example_instance` | `<instance>` | used in `--help`, where a real name beats a placeholder |
@@ -117,6 +118,15 @@ it: scope it to the one repository, and protect `main` so that it needs a
 reviewed pull request. Fine-grained tokens expire, at most a year out, and
 `doctor` cannot tell an expired one from a good one, so put the date in a
 calendar.
+
+### Local sources
+
+A clone in `/opt/<name>/extra/` is for changing a package an extra installs,
+on the host that runs it. The instrument's installer decides what to build from
+it; `install` lets operators run git in each clone, and `doctor` warns while
+any is present, with its branch and anything uncommitted or not on GitHub.
+Keeping a change is a normal push and pull request from the clone; removing it
+and rerunning the installer returns the host to the GitHub build.
 
 ## Dashboard
 
