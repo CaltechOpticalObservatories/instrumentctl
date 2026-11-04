@@ -34,7 +34,7 @@ def _epilog(product: Product) -> str:
         (f"start {subsystem}", "start every deployed daemon in it"),
         (f"stop {subsystem}", "stop them, in reverse order"),
         (f"restart {instance}", f"e.g. after editing {etc}/{instance}.yaml"),
-        (f"logs {instance} -f", "follow its log"),
+        (f"logs {instance}", "follow its log"),
         ("doctor", "why isn't it working?"),
         ("dashboard", "serve a web page of this host's daemons, with start and stop"),
         ('hotfix "what you fixed"', "save an edit to the code here and send it for review"),
@@ -141,8 +141,9 @@ def _parser(product: Product) -> argparse.ArgumentParser:
 
     p = add("logs", commands.logs, "show daemon logs (journalctl)")
     p.add_argument("targets", nargs="+", metavar="target", help=targets_help)
-    p.add_argument("-f", "--follow", action="store_true", help="keep printing new lines")
-    p.add_argument("-n", "--lines", type=int, help="how many lines (default 100)")
+    p.add_argument("-f", "--follow", action=argparse.BooleanOptionalAction, default=True,
+                   help="keep printing new lines (default)")
+    p.add_argument("-n", "--lines", type=int, help="how many lines (default 100 unless --since)")
     p.add_argument("--since", help='e.g. "1 hour ago", today, "2026-09-21 09:00"')
     p.add_argument("-p", "--priority", help="e.g. err, warning")
 

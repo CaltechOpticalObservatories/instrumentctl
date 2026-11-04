@@ -403,7 +403,7 @@ def logs(paths: Paths, args: argparse.Namespace) -> int:
         cmd.append("-f")
     if args.lines is not None:
         cmd += ["-n", str(args.lines)]
-    elif not args.since and not args.follow:
+    elif not args.since:
         cmd += ["-n", "100"]
     if args.since:
         cmd += ["--since", args.since]
