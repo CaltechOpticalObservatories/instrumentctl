@@ -151,6 +151,7 @@ def _parser(product: Product) -> argparse.ArgumentParser:
             "Commit what you edited in the checkout to a hotfix branch in your name,\n"
             "push it to GitHub and open a pull request. This host keeps running the\n"
             f"fix; once a developer merges it, run: {product.name} update\n\n"
+            "An edit in a submodule goes to the submodule's own repository.\n"
             "With no description, show what is edited and not yet saved.")
     p.add_argument("message", nargs="?", metavar="description",
                    help='what you fixed, e.g. "ADC hangs after power cycle"')
@@ -165,7 +166,8 @@ def _parser(product: Product) -> argparse.ArgumentParser:
             f"bring the code on this host up to date with {product.git_base}",
             f"Fetch {product.git_base} from GitHub and move this host onto it. If the host is\n"
             "running a hotfix, only once its pull request is merged. Running daemons\n"
-            "keep the old code until they are restarted.")
+            "keep the old code until they are restarted. Submodules move to where\n"
+            "the checkout points, except one on a hotfix that is not yet merged and bumped.")
     p.add_argument("--abandon", action="store_true",
                    help="leave an unmerged hotfix, e.g. one a developer rejected; "
                         "it stays on GitHub")

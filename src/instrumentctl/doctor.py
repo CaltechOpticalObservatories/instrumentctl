@@ -478,32 +478,73 @@ def _hotfixes(r: Report, paths: Paths) -> None:
     if not _is_file(token):
         r.warn(f"no {token}, so hotfix cannot push")
         r.hint("admin: put a fine-grained GitHub token there (see the README)")
-    elif hotfix.read_token(paths) is None:
+    elif hotfix.read_token(token) is None:
         r.bad(f"cannot read {token}, so hotfix cannot push")
         r.hint(_install_hint(paths))
     else:
         r.ok(f"{token} is readable")
-    problem = hotfix.checkout_problem(paths)
+    for owner_token in paths.owner_tokens:
+        if hotfix.read_token(owner_token) is None:
+            r.bad(f"cannot read {owner_token}")
+            r.hint(_install_hint(paths))
+        else:
+            r.ok(f"{owner_token} is readable")
+    main = hotfix.Checkout.main(paths)
+    problem = hotfix.checkout_problem(main)
     if problem:
         r.warn(problem)
         return
-    branch = hotfix.current_branch(paths)
+    branch = hotfix.current_branch(main)
     if hotfix.is_hotfix(paths, branch):
         assert branch is not None
         r.warn(f"this host is running {branch}, not {base}")
         r.hint(f"once it is merged: {name} update")
-        waiting = hotfix.unsent(paths, branch)
-        if waiting:
-            r.warn(f"{waiting} commit(s) on {branch} are not on GitHub")
-            r.hint(f"{name} hotfix --push")
+        _unsent(r, main, branch)
     elif branch == base:
         r.ok(f"{paths.repo} is on {base}")
     else:
         r.warn(f"{paths.repo} is on {branch or 'a detached HEAD'}, not {base}")
-    edited = hotfix.changes(paths).edited
+    _unsaved(r, main)
+    for driver in hotfix.submodules(paths):
+        _submodule_hotfix(r, driver)
+
+
+def _unsent(r: Report, checkout: hotfix.Checkout, branch: str) -> None:
+    waiting = hotfix.unsent(checkout, branch)
+    if waiting:
+        r.warn(f"{waiting} commit(s) on {branch} are not on GitHub")
+        r.hint(f"{checkout.paths.product.name} hotfix --push")
+
+
+def _unsaved(r: Report, checkout: hotfix.Checkout) -> None:
+    name = checkout.paths.product.name
+    edited = hotfix.changes(checkout).edited
     if edited:
-        r.warn(f"{len(edited)} edited file(s) in {paths.repo} not saved: {' '.join(edited)}")
+        r.warn(f"{len(edited)} edited file(s) in {checkout.tree} not saved: {' '.join(edited)}")
         r.hint(f'{name} hotfix "what you fixed"   # or: {name} hotfix --undo')
+
+
+def _submodule_hotfix(r: Report, driver: hotfix.Checkout) -> None:
+    """Whether a submodule runs a hotfix or has edits, and whether hotfix can send it."""
+    paths = driver.paths
+    name = paths.product.name
+    problem = hotfix.checkout_problem(driver)
+    if problem:
+        r.warn(problem)
+        return
+    branch = hotfix.current_branch(driver)
+    running = hotfix.is_hotfix(paths, branch)
+    if running:
+        assert branch is not None
+        r.warn(f"{driver.submodule} is running {branch}")
+        r.hint(f"once it is merged and bumped in {name}: {name} update")
+        _unsent(r, driver, branch)
+    found = hotfix.changes(driver)
+    _unsaved(r, driver)
+    if running or found.edited or found.new:
+        problem = hotfix.unsendable(driver)
+        if problem:
+            r.warn(problem)
 
 
 def _git_out(tree: Path, *args: str) -> Optional[str]:

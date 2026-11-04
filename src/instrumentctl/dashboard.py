@@ -117,17 +117,29 @@ def snapshot(paths: Paths) -> Dict[str, Any]:
 
 def checkout(paths: Paths) -> Dict[str, Any]:
     """Which code the daemons run: the branch, and anything a hotfix left behind."""
-    problem = hotfix.checkout_problem(paths)
+    main = hotfix.Checkout.main(paths)
+    problem = hotfix.checkout_problem(main)
     if problem:
         return {"problem": problem}
-    branch = hotfix.current_branch(paths)
-    found = hotfix.changes(paths)
+    state = _tree_state(main)
+    drivers = [{"path": driver.submodule, **_tree_state(driver)}
+               for driver in hotfix.submodules(paths)
+               if hotfix.checkout_problem(driver) is None]
+    return {
+        **state,
+        "base": paths.product.git_base,
+        "submodules": [d for d in drivers if d["hotfix"] or d["edited"] or d["unsent"]],
+    }
+
+
+def _tree_state(tree: hotfix.Checkout) -> Dict[str, Any]:
+    branch = hotfix.current_branch(tree)
+    found = hotfix.changes(tree)
     return {
         "branch": branch,
-        "base": paths.product.git_base,
-        "hotfix": hotfix.is_hotfix(paths, branch),
+        "hotfix": hotfix.is_hotfix(tree.paths, branch),
         "edited": len(found.edited) + len(found.new),
-        "unsent": hotfix.unsent(paths, branch) if branch else 0,
+        "unsent": hotfix.unsent(tree, branch) if branch else 0,
     }
 
 

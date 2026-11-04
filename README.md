@@ -119,6 +119,22 @@ reviewed pull request. Fine-grained tokens expire, at most a year out, and
 `doctor` cannot tell an expired one from a good one, so put the date in a
 calendar.
 
+### Submodules
+
+An edit inside a submodule, such as a driver, is committed on a hotfix branch
+in the submodule and sent as a pull request to the submodule's own repository,
+against the branch `.gitmodules` names (default `main`). The checkout's
+pointer to the submodule is not touched: once the pull request is merged, a
+developer bumps it through the normal process. Until then `update` keeps the
+submodule on its hotfix branch, and afterwards moves it to where the checkout
+points, as it does for every other submodule.
+
+A fine-grained token covers one GitHub owner, so a submodule needs a token for
+its own owner in `/etc/<name>/github-token-<owner>`, e.g.
+`github-token-COO-Utilities`, scoped and protected as above. `hotfix` refuses
+an edit in a submodule with no token for its owner before committing anything;
+put such an edit back with `--undo`.
+
 ### Local sources
 
 A clone in `/opt/<name>/extra/` is for changing a package an extra installs,

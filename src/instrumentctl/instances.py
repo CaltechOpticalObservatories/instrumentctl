@@ -132,6 +132,15 @@ class Paths:
         """The token hotfix pushes and opens pull requests with."""
         return self.etc / "github-token"
 
+    def owner_token(self, owner: str) -> Path:
+        """The token hotfix uses for a submodule whose repository ``owner`` holds."""
+        return self.etc / f"github-token-{owner}"
+
+    @property
+    def owner_tokens(self) -> List[Path]:
+        """Every per-owner token present on this host."""
+        return sorted(self.etc.glob("github-token-*"))
+
     def config(self, instance: str) -> Path:
         """An instance's deployed config, which the unit passes to the daemon."""
         return self.etc / f"{instance}.yaml"
