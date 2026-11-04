@@ -50,6 +50,8 @@ class Paths:
     venv: Path
     etc: Path
     logs: Path
+    # Host-local clones a host installs an extra from instead of GitHub
+    extra: Path
 
     @classmethod
     def from_env(cls, product: Product, repo_hint: Optional[Path] = None,
@@ -67,6 +69,7 @@ class Paths:
             venv=resolve_dir("VENV_DIR", product.venv_dir, f"/opt/{product.name}/venv"),
             etc=resolve_dir("ETC_DIR", product.etc_dir, f"/etc/{product.name}"),
             logs=resolve_dir("LOGS_DIR", product.logs_dir, f"/var/log/{product.name}"),
+            extra=resolve_dir("EXTRA_DIR", product.extra_dir, f"/opt/{product.name}/extra"),
         )
 
     @property
@@ -134,6 +137,13 @@ def _names_in(directory: Path) -> List[str]:
     if not directory.is_dir():
         return []
     return sorted(p.stem for p in directory.glob("*.env") if p.is_file())
+
+
+def extra_checkouts(paths: Paths) -> List[Path]:
+    """Git clones in the extra directory, sorted."""
+    if not paths.extra.is_dir():
+        return []
+    return sorted(p for p in paths.extra.iterdir() if (p / ".git").exists())
 
 
 def deployed(paths: Paths) -> List[str]:

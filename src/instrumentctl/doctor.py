@@ -9,6 +9,7 @@ import os
 import pwd
 import socket
 import stat
+import subprocess
 from importlib import metadata
 from pathlib import Path
 from typing import Optional
@@ -426,6 +427,34 @@ def _hotfixes(r: Report, paths: Paths) -> None:
         r.hint(f'{name} hotfix "what you fixed"   # or: {name} hotfix --undo')
 
 
+def _git_out(tree: Path, *args: str) -> Optional[str]:
+    """Run git in ``tree`` and return its output, or None if git failed."""
+    proc = subprocess.run(["git", "-C", str(tree), *args], check=False, text=True,
+                          capture_output=True, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+    return proc.stdout.strip() if proc.returncode == 0 else None
+
+
+def _extra_sources(r: Report, paths: Paths) -> None:
+    """Whether an extra is installed from a host-local clone instead of GitHub."""
+    checkouts = inst.extra_checkouts(paths)
+    if not checkouts:
+        return
+    r.section("Local sources")
+    for tree in checkouts:
+        branch = _git_out(tree, "symbolic-ref", "--short", "-q", "HEAD")
+        r.warn(f"{tree} ({branch or 'detached HEAD'}) replaces the GitHub build")
+        edited = _git_out(tree, "status", "--porcelain")
+        if edited:
+            r.warn(f"{len(edited.splitlines())} uncommitted change(s) in {tree}")
+        ahead = _git_out(tree, "rev-list", "--count", "@{upstream}..HEAD")
+        if ahead is None and branch:
+            r.warn(f"{branch} in {tree} is not on GitHub")
+        elif ahead and ahead != "0":
+            r.warn(f"{ahead} commit(s) in {tree} are not on GitHub")
+    r.hint(f"to go back: remove them from {paths.extra}, then "
+           f"sudo {paths.repo}/systemd/install.sh")
+
+
 def doctor(paths: Paths, _args: argparse.Namespace) -> int:
     """Run every check and exit 1 if any FAILed."""
     me = pwd.getpwuid(os.geteuid()).pw_name
@@ -439,6 +468,7 @@ def doctor(paths: Paths, _args: argparse.Namespace) -> int:
     _placement(r, paths)
     _secrets(r, paths)
     _hotfixes(r, paths)
+    _extra_sources(r, paths)
     print()
     if r.problems == 0:
         print("No problems found.")
