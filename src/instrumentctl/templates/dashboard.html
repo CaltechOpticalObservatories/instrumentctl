@@ -276,6 +276,11 @@ function notices(data) {
   else if (co.branch && co.branch !== co.base) out.push(`The checkout is on ${co.branch}, not ${co.base}`);
   if (co.edited) out.push(`${co.edited} unsaved edit(s) in the checkout; see: ${PROG} hotfix`);
   if (co.unsent) out.push(`${co.unsent} commit(s) not sent to GitHub: ${PROG} hotfix --push`);
+  for (const sub of co.submodules || []) {
+    if (sub.hotfix) out.push(`${sub.path} is running hotfix branch ${sub.branch}; once it is merged and bumped: ${PROG} update`);
+    if (sub.edited) out.push(`${sub.edited} unsaved edit(s) in ${sub.path}; see: ${PROG} hotfix`);
+    if (sub.unsent) out.push(`${sub.unsent} commit(s) in ${sub.path} not sent to GitHub: ${PROG} hotfix --push`);
+  }
   if (data.undeployed.length)
     out.push(`Defined for this host but not deployed: ${data.undeployed.join(", ")} (${PROG} deploy --new)`);
   return out.map(text => el("div", {class: "notice"}, icon("restarting"), text));

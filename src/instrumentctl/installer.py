@@ -308,14 +308,17 @@ def _git_shared_repository(repo: Path) -> None:
 
 
 def _github_token(product: Product, paths: Paths) -> None:
-    """Let operators, who push hotfixes with it, read the token, and no one else."""
+    """Let operators, who push hotfixes with them, read the tokens, and no one else."""
     token = paths.github_token
     if not token.exists():
         print(f"  {paint('no token', '33'):<22} {token}; hotfix cannot push "
               "until one is put there (see the README)")
-        return
-    shutil.chown(token, "root", product.ops_group)
-    token.chmod(TOKEN_MODE)
+    else:
+        shutil.chown(token, "root", product.ops_group)
+        token.chmod(TOKEN_MODE)
+    for owner_token in paths.owner_tokens:
+        shutil.chown(owner_token, "root", product.ops_group)
+        owner_token.chmod(TOKEN_MODE)
 
 
 def _deploy_key(paths: Paths) -> None:
@@ -354,7 +357,8 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
 
     for tree in operator_trees(paths):
         _hand_to_operators(tree, product,
-                           keep=(paths.secrets, paths.github_token, paths.deploy_key))
+                           keep=(paths.secrets, paths.github_token, paths.deploy_key,
+                                 *paths.owner_tokens))
         _say("owned", f"{tree} by {product.user}:{product.ops_group}")
     _git_safe_directory(paths)
     subprocess.run(["systemctl", "daemon-reload"], check=False)
