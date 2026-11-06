@@ -240,7 +240,7 @@ apt packages and host roles.
 ```bash
 sudo apt install acl git curl
 sudo git clone --recurse-submodules <repo-url> /opt/<name>/app
-sudo /opt/<name>/app/systemd/install.sh <dev-user> <operator>... [--host-role <role>] [--extra <name>]
+sudo /opt/<name>/app/systemd/install.sh <dev-user> <operator>... --host-role <role> [--extra <name>]
 # log out and back in, for the new groups and PATH
 $EDITOR /etc/<name>/secrets.env    # the credentials doctor asks for
 <name> doctor
@@ -268,7 +268,9 @@ leaves behind.
 - creates the ops group and the daemon account, and enrols each user named
   (the dev user included) into the ops group and `systemd-journal`;
 - makes `/etc/<name>`, `/etc/<name>/instances` and `/var/log/<name>`, seeds
-  `secrets.env` and the host role file;
+  `secrets.env`, and records `--host-role` in `/etc/<name>/host`. The role is
+  never guessed: with neither, `install` stops. Once recorded it is kept; edit
+  the file to change it;
 - renders the template unit, the polkit rule, the sudoers drop-in, the two
   helper scripts and `/etc/profile.d/<name>.sh`, which puts the venv's `bin`
   on every login shell's `PATH`, so `python` and the venv's tools need no

@@ -154,11 +154,9 @@ def _secrets_and_role(product: Product, paths: Paths, role: Optional[str]) -> No
     shutil.chown(paths.secrets, "root", product.ops_group)
     paths.secrets.chmod(SECRETS_MODE)
 
-    host_file = paths.etc / "host"
-    if not host_file.exists():
-        host_file.write_text(f"{role or os.uname().nodename.split('.')[0]}\n",
-                             encoding="utf-8")
-        _say("recorded host", f"{host_file.read_text().strip()} in {host_file}")
+    if not paths.host_file.exists():
+        paths.host_file.write_text(f"{role}\n", encoding="utf-8")
+        _say("recorded host", f"{role} in {paths.host_file}")
 
 
 def _artefacts(product: Product, paths: Paths) -> None:
@@ -341,6 +339,10 @@ def install(paths: Paths, args: argparse.Namespace) -> int:
         return 1
     if shutil.which("setfacl") is None:
         print(f"{product.name}: setfacl not found; install the acl package first")
+        return 1
+    if not args.host_role and not paths.host_file.exists():
+        print(f"{product.name}: no host role yet; pass --host-role <role>, "
+              f"the {product.env_key('HOST')} its instance files name")
         return 1
 
     print(f"{product.name} install: {os.uname().nodename}")

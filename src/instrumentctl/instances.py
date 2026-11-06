@@ -128,6 +128,11 @@ class Paths:
         return self.etc / "extras"
 
     @property
+    def host_file(self) -> Path:
+        """This host's role, written once by install."""
+        return self.etc / "host"
+
+    @property
     def github_token(self) -> Path:
         """The token hotfix pushes and opens pull requests with."""
         return self.etc / "github-token"
