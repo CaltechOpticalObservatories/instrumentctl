@@ -185,7 +185,7 @@ def _parser(product: Product) -> argparse.ArgumentParser:
     p.add_argument("operators", nargs="*", metavar="user",
                    help=f"accounts to enrol in {product.ops_group}")
     p.add_argument("--host-role", metavar="ROLE",
-                   help="what to record in <etc>/host (default: short hostname)")
+                   help="what to record in <etc>/host; needed until it is recorded")
     return parser
 
 
