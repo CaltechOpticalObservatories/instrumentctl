@@ -67,6 +67,7 @@
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px;
            margin-bottom: 16px; }
   header #theme { margin-left: auto; }
+  header #view { margin-left: 0; }
   h1 { margin: 0; font-size: 20px; }
   .meta { color: var(--text-2); font-weight: 400; }
   .stale { color: var(--critical); font-weight: 600; }
@@ -116,6 +117,52 @@
              border: 1px solid var(--ring); border-radius: 6px; padding: 8px 12px;
              margin-top: 8px; box-shadow: 0 2px 8px var(--ring); }
   code { font-size: 13px; }
+
+  /* Tiles: one box per daemon, to read from across the room. The state's
+     colour tints the box and edges it, but the words stay in text ink and the
+     shape and word carry the state, as in the table. */
+  #tiles section { margin-bottom: 20px; }
+  #tiles h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+  button.group-head { min-width: 0; padding: 2px 8px; margin-left: -8px; font-size: 15px;
+                      font-weight: 600; border-color: transparent; background: none; }
+  button.group-head .meta { font-size: 13px; margin-left: 8px; }
+  .boxes { display: grid; gap: 10px;
+           grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  button.box {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+    min-height: 92px; margin: 0; padding: 12px 14px; font-size: 14px;
+    border: 1px solid var(--ring); border-left: 6px solid var(--tone); border-radius: 8px;
+    background: color-mix(in oklab, var(--tone) var(--tint), var(--card));
+  }
+  button.box:hover { border-color: var(--text-2); border-left-color: var(--tone); }
+  .box .state { font-size: 16px; }
+  .box svg.icon { width: 16px; height: 16px; }
+  .box code { font-size: 15px; font-weight: 600; word-break: break-all; }
+  .box .detail { font-size: 12px; }
+  .k-good { --tone: var(--good); --tint: 8%; }
+  .k-warning, .k-restarting { --tone: var(--warning); --tint: 22%; }
+  .k-critical { --tone: var(--critical); --tint: 16%; }
+  .k-neutral, .k-unknown { --tone: var(--muted); --tint: 0%; }
+  .k-unknown { border-left-style: dashed; }
+  /* A grey wall says "this is not live" before anyone reads the header */
+  .stale-data #tiles { opacity: 0.45; filter: grayscale(1); }
+
+  dialog { width: min(440px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--ring);
+           border-radius: 10px; background: var(--card); color: var(--text);
+           box-shadow: 0 8px 32px var(--ring); }
+  .menu-body { padding: 20px; }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+  dialog h2 { margin: 0 0 6px; font-size: 18px; }
+  dialog h2 code { font-size: 18px; }
+  dialog dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px;
+              margin: 14px 0; }
+  dialog dt { color: var(--text-2); }
+  dialog dd { margin: 0; }
+  dialog ul { list-style: none; padding: 0; margin: 14px 0; }
+  dialog li { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+  dialog .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+  dialog .actions button { margin: 0; padding: 6px 12px; font-size: 14px; }
+  dialog .actions .close { margin-left: auto; min-width: 0; }
 </style>
 <script>
   // Before the body is drawn, so a dark choice never flashes light first
@@ -128,10 +175,13 @@
   <span class="meta" id="host"></span>
   <span class="meta" id="updated">connecting…</span>
   <button id="theme" title="Follow the system, or always light or dark"></button>
+  <button id="view" title="A table with every detail, or a tile per daemon to watch at a glance"></button>
 </header>
 <div class="summary" id="summary"></div>
 <div id="notices"></div>
-<div class="card">
+<div id="tiles" hidden></div>
+<dialog id="menu" aria-labelledby="menu-title"></dialog>
+<div class="card" id="table-view">
   <table>
     <thead>
       <tr>
@@ -153,6 +203,7 @@ const COLUMNS = 10;
 const SVG = "http://www.w3.org/2000/svg";
 let busy = false;
 let lastOk = 0;
+let lastData = null;
 
 // systemd's ActiveState -> a shape and a word. Each shape differs in outline
 // as well as colour: a disc, a half disc, a triangle, a crossed square, a ring.
@@ -213,45 +264,172 @@ function bytes(n) {
 
 function isRunning(i) { return ["active", "activating", "reloading"].includes(i.active); }
 
-// The same three buttons, the same width, on an instance's row and on its
-// subsystem's, so they line up down the column
-function buttons(targets, running, active, label) {
+// Start, stop and restart for an instance or a subsystem, in the table and
+// in the tiles' menu alike
+function verbs(targets, running, active, label) {
   const name = targets.join(" ");
   const make = (verb, text, enabled) => el("button", {
     disabled: enabled && !busy ? null : "", title: `${PROG} ${verb} ${name}`,
-    onclick: () => run(verb, targets, label)}, text);
-  return el("td", {class: "actions"},
-    make("start", "▶ Start", !active), make("stop", "■ Stop", running),
-    make("restart", "↻ Restart", true));
+    "data-focus": `${verb} ${name}`, onclick: () => run(verb, targets, label)}, text);
+  return [make("start", "▶ Start", !active), make("stop", "■ Stop", running),
+          make("restart", "↻ Restart", true)];
+}
+
+// The same three buttons, the same width, on an instance's row and on its
+// subsystem's, so they line up down the column
+function buttons(targets, running, active, label) {
+  return el("td", {class: "actions"}, ...verbs(targets, running, active, label));
+}
+
+// Why a failed instance failed: its exit status, or systemd's word for it
+function whyFailed(i) {
+  if (i.active !== "failed" || !i.result) return "";
+  return i.result === "exit-code" && i.exit_status !== null ? `exit ${i.exit_status}` : i.result;
+}
+
+// Redrawing every poll would drop the keyboard's place; put it back on the
+// new element that stands for the same thing
+function keepingFocus(container, redraw) {
+  const now = document.activeElement;
+  const key = container.contains(now) ? now.dataset.focus : undefined;
+  redraw();
+  if (key) container.querySelector(`[data-focus="${CSS.escape(key)}"]`)?.focus();
 }
 
 function row(i) {
   const [kind, label] = stateOf(i);
-  let why = "";
-  if (i.active === "failed" && i.result) {
-    why = i.result === "exit-code" && i.exit_status !== null ? `exit ${i.exit_status}` : i.result;
-  }
-  const config = {
-    differs: el("span", {class: "flag", title: "differs from the repo's copy"}, "✎ edited here"),
-    missing: el("span", {class: "flag"}, icon("critical"), "missing"),
-  }[i.config] || el("span", {class: "muted"}, "as in repo");
-  const restarts = i.restarts
-    ? el("span", {class: "flag", title: "automatic restarts since it was last started"},
-         icon("restarting"), i.restarts)
-    : el("span", {class: "muted"}, "0");
+  const why = whyFailed(i);
   return el("tr", {},
     el("td", {}, el("span", {class: "state"}, icon(kind), label,
                     why && el("span", {class: "detail"}, `(${why})`))),
     el("td", {}, el("code", {}, i.name)),
     el("td", {class: "muted tabular"}, i.since),
-    el("td", {}, i.boot === "enabled" ? "yes" : el("span", {class: "muted"}, i.boot || "—")),
-    el("td", {class: "num"}, restarts),
+    el("td", {}, bootNote(i)),
+    el("td", {class: "num"}, restartsNote(i)),
     el("td", {class: "num muted"}, i.pid || ""),
     el("td", {class: "num muted"}, bytes(i.memory)),
     el("td", {class: "muted"}, i.daemon),
-    el("td", {}, config),
+    el("td", {}, configNote(i)),
     buttons([i.name], isRunning(i), i.active === "active", i.name));
 }
+
+function configNote(i) {
+  return {
+    differs: el("span", {class: "flag", title: "differs from the repo's copy"}, "✎ edited here"),
+    missing: el("span", {class: "flag"}, icon("critical"), "missing"),
+  }[i.config] || el("span", {class: "muted"}, "as in repo");
+}
+
+function restartsNote(i) {
+  return i.restarts
+    ? el("span", {class: "flag", title: "automatic restarts since it was last started"},
+         icon("restarting"), i.restarts)
+    : el("span", {class: "muted"}, "0");
+}
+
+function bootNote(i) {
+  return i.boot === "enabled" ? "yes" : el("span", {class: "muted"}, i.boot || "—");
+}
+
+// A tile: the state large enough to read across the room, the name, and
+// the one thing worth knowing about it
+function box(i) {
+  const [kind, label] = stateOf(i);
+  let detail = whyFailed(i);
+  if (!detail && i.restarts) detail = `↻ ${i.restarts} automatic restart${i.restarts === 1 ? "" : "s"}`;
+  if (!detail && i.since) detail = `since ${i.since}`;
+  return el("button", {class: `box k-${kind}`, "data-focus": `box ${i.name}`,
+                       title: `${i.name}: ${label}; click to start, stop or restart`,
+                       onclick: () => openMenu({instance: i.name})},
+    el("span", {class: "state"}, icon(kind), label),
+    el("code", {}, i.name),
+    detail && el("span", {class: "detail"}, detail),
+    i.config !== "repo" && el("span", {class: "detail"},
+                              i.config === "missing" ? "config missing" : "✎ config edited here"));
+}
+
+function tiles(bySubsystem) {
+  const sections = [...bySubsystem].map(([subsystem, members]) => {
+    const active = members.filter(i => i.active === "active").length;
+    return el("section", {},
+      el("h2", {}, el("button", {class: "group-head", "data-focus": `group ${subsystem}`,
+                                 title: `Start, stop or restart all of ${subsystem}`,
+                                 onclick: () => openMenu({subsystem})},
+        subsystem, el("span", {class: "meta"}, `${active} of ${members.length} active`))),
+      el("div", {class: "boxes"}, ...members.map(box)));
+  });
+  if (!sections.length)
+    sections.push(el("p", {class: "meta"}, `No instances deployed on this host. ${PROG} deploy <instance>`));
+  const container = document.getElementById("tiles");
+  keepingFocus(container, () => container.replaceChildren(...sections));
+}
+
+// What the menu shows: {instance: name} or {subsystem: name}, or null when closed
+let menuFor = null;
+
+function openMenu(what) {
+  menuFor = what;
+  drawMenu();
+  const dialog = document.getElementById("menu");
+  if (!dialog.open) dialog.showModal();
+}
+
+function drawMenu() {
+  const dialog = document.getElementById("menu");
+  if (!menuFor || !lastData) return;
+  const all = lastData.instances;
+  let parts;
+  if (menuFor.instance) {
+    const i = all.find(x => x.name === menuFor.instance);
+    if (!i) { dialog.close(); return; }  // undeployed while the menu was open
+    const [kind, label] = stateOf(i);
+    const why = whyFailed(i);
+    parts = [
+      el("h2", {id: "menu-title"}, el("code", {}, i.name)),
+      el("span", {class: "state"}, icon(kind), label, why && el("span", {class: "detail"}, `(${why})`)),
+      el("dl", {},
+        el("dt", {}, "Since"), el("dd", {class: "tabular"}, i.since || "—"),
+        el("dt", {}, "Restarts"), el("dd", {}, restartsNote(i)),
+        el("dt", {}, "Starts at boot"), el("dd", {}, bootNote(i)),
+        el("dt", {}, "PID"), el("dd", {class: "tabular"}, i.pid || "—"),
+        el("dt", {}, "Memory"), el("dd", {class: "tabular"}, bytes(i.memory) || "—"),
+        el("dt", {}, "Daemon"), el("dd", {}, i.daemon),
+        el("dt", {}, "Config"), el("dd", {}, configNote(i))),
+      verbs([i.name], isRunning(i), i.active === "active", i.name),
+    ];
+  } else {
+    const subsystem = menuFor.subsystem;
+    const members = all.filter(x => x.subsystem === subsystem);
+    if (!members.length) { dialog.close(); return; }
+    const active = members.filter(i => i.active === "active").length;
+    parts = [
+      el("h2", {id: "menu-title"}, `All of ${subsystem}`),
+      el("span", {class: "meta"}, `${active} of ${members.length} active`),
+      el("ul", {}, ...members.map(i => {
+        const [kind, label] = stateOf(i);
+        return el("li", {}, el("span", {class: "state"}, icon(kind), label), el("code", {}, i.name));
+      })),
+      verbs([subsystem], members.some(isRunning), active === members.length, `all of ${subsystem}`),
+    ];
+  }
+  const actions = parts.pop();
+  keepingFocus(dialog, () => dialog.replaceChildren(el("div", {class: "menu-body"},
+    ...parts, el("div", {class: "actions"}, ...actions,
+                 el("button", {class: "close", "data-focus": "close",
+                               onclick: () => dialog.close()}, "Close")))));
+}
+
+document.getElementById("menu").addEventListener("close", () => {
+  const was = menuFor;
+  menuFor = null;
+  // Back to the tile it was opened from, which has been redrawn since
+  const key = was && (was.instance ? `box ${was.instance}` : `group ${was.subsystem}`);
+  if (key) document.querySelector(`#tiles [data-focus="${CSS.escape(key)}"]`)?.focus();
+});
+// A click on the backdrop lands on the dialog itself, outside its content
+document.getElementById("menu").addEventListener("click", event => {
+  if (event.target === event.currentTarget) event.currentTarget.close();
+});
 
 function group(subsystem, members) {
   const active = members.filter(i => i.active === "active").length;
@@ -287,6 +465,7 @@ function notices(data) {
 }
 
 function render(data) {
+  lastData = data;
   const all = data.instances;
   document.getElementById("host").textContent = `host ${data.host}`;
   const counts = {active: 0, failed: 0, other: 0};
@@ -305,13 +484,21 @@ function render(data) {
     if (!bySubsystem.has(i.subsystem)) bySubsystem.set(i.subsystem, []);
     bySubsystem.get(i.subsystem).push(i);
   }
-  const bodies = [...bySubsystem].map(([s, members]) => group(s, members));
-  if (!bodies.length)
-    bodies.push(el("tbody", {}, el("tr", {}, el("td", {colspan: COLUMNS, class: "meta"},
-      `No instances deployed on this host. ${PROG} deploy <instance>`))));
-  const table = document.querySelector("table");
-  for (const old of table.querySelectorAll("tbody")) old.remove();
-  table.append(...bodies);
+  // Only the view on screen is drawn; switching views draws the other at once
+  if (view() === "tiles") {
+    tiles(bySubsystem);
+  } else {
+    const bodies = [...bySubsystem].map(([s, members]) => group(s, members));
+    if (!bodies.length)
+      bodies.push(el("tbody", {}, el("tr", {}, el("td", {colspan: COLUMNS, class: "meta"},
+        `No instances deployed on this host. ${PROG} deploy <instance>`))));
+    const table = document.querySelector("table");
+    keepingFocus(table, () => {
+      for (const old of table.querySelectorAll("tbody")) old.remove();
+      table.append(...bodies);
+    });
+  }
+  drawMenu();
 }
 
 function say(text, ok) {
@@ -350,6 +537,7 @@ async function refresh() {
   }
   const updated = document.getElementById("updated");
   const age = Math.round((Date.now() - lastOk) / 1000);
+  document.body.classList.toggle("stale-data", !lastOk || age > 3 * POLL_MS / 1000);
   if (!lastOk) { updated.textContent = "cannot reach the dashboard service"; updated.className = "stale"; }
   else if (age > 3 * POLL_MS / 1000) { updated.textContent = `no update for ${age}s`; updated.className = "stale"; }
   else { updated.textContent = `updated ${new Date(lastOk).toLocaleTimeString()}`; updated.className = "meta"; }
@@ -367,6 +555,31 @@ document.getElementById("theme").addEventListener("click", () => {
   showTheme();
 });
 showTheme();
+
+// The view is in the address too, so a screen left up overnight can be
+// bookmarked or opened straight into tiles: .../#tiles
+const VIEWS = {table: "☰ Table", tiles: "▦ Tiles"};
+function view() {
+  const asked = location.hash.slice(1);
+  if (asked in VIEWS) return asked;
+  return localStorage.getItem("view") in VIEWS ? localStorage.getItem("view") : "table";
+}
+function showView() {
+  const current = view();
+  document.getElementById("view").textContent = VIEWS[current];
+  document.getElementById("tiles").hidden = current !== "tiles";
+  document.getElementById("table-view").hidden = current !== "table";
+  if (current !== "tiles" && document.getElementById("menu").open) document.getElementById("menu").close();
+  if (lastData) render(lastData);
+}
+document.getElementById("view").addEventListener("click", () => {
+  const next = view() === "tiles" ? "table" : "tiles";
+  localStorage.setItem("view", next);
+  history.replaceState(null, "", `#${next}`);
+  showView();
+});
+window.addEventListener("hashchange", showView);
+showView();
 
 refresh();
 setInterval(refresh, POLL_MS);
