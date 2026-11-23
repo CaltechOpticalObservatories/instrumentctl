@@ -152,6 +152,13 @@ the checkout is on a hotfix. It refreshes every two seconds, and has start,
 stop and restart for each instance and each subsystem, which act exactly as
 the CLI's do (a subsystem stops in reverse order).
 
+The **Tiles** button in the header swaps the table for one box per daemon,
+tinted by its state, which is easier to keep an eye on through a long night.
+Click a box, or a subsystem's name, for its details and start, stop and
+restart. The page remembers the choice, and `http://<host>:<port>/#tiles`
+always opens in tiles. If the page stops getting updates, the tiles turn grey
+so nobody trusts a frozen picture.
+
 It needs Flask and waitress, the `dashboard` extra: have the instrument depend
 on `instrumentctl[dashboard]`. `install` renders `<name>-dashboard.service`,
 which runs it as the daemon account; polkit lets that account, as a member of
